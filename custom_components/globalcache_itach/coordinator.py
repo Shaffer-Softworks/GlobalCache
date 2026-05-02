@@ -11,6 +11,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
 
 from .client import ItachClient, ItachError
 from .const import (
@@ -23,6 +24,7 @@ from .const import (
     CONF_HOST,
     CONF_ID_POLICY,
     CONF_PORT,
+    CONF_REMOTES,
     DEFAULT_CARRIER_HZ,
     DEFAULT_COMMAND_TIMEOUT,
     DEFAULT_CONNECT_TIMEOUT,
@@ -115,6 +117,11 @@ class ItachCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         out: dict[str, Any] = {
             "devices_lines": [],
             "version_line": None,
+            "poll_at": dt_util.utcnow(),
+            "tcp_connected": False,
+            "remote_count": len(self.config_entry.options.get(CONF_REMOTES, [])),
+            "host": self._opts[CONF_HOST],
+            "tcp_port": self._opts[CONF_PORT],
         }
         try:
             out["devices_lines"] = await self.client.getdevices()
@@ -131,6 +138,7 @@ class ItachCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 out["version_line"] = vlines[-1].strip()
         except (TimeoutError, OSError, ItachError) as err:
             _LOGGER.debug("getversion probe failed: %s", err)
+        out["tcp_connected"] = self.client.is_connected
         return out
 
     async def async_shutdown(self) -> None:

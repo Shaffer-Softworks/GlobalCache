@@ -99,3 +99,8 @@ async def test_unknowncommand_raises(fake_server: tuple[str, int]) -> None:
     async with client:
         with pytest.raises(ItachError):
             await client.send_sendir(1, 1, 99, 38000, 1, 1, [1, 2])
+
+
+def test_is_connected_false_before_connect() -> None:
+    client = ItachClient("127.0.0.1", 4998)
+    assert client.is_connected is False
