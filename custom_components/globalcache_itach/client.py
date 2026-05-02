@@ -56,6 +56,12 @@ class ItachClient:
         self._closed = asyncio.Event()
         self._ir_callbacks: list[Callable[[str], Coroutine[None, None, None]]] = []
 
+    @property
+    def is_connected(self) -> bool:
+        """Whether a TCP session is currently open (not closing)."""
+        w = self._writer
+        return w is not None and not w.is_closing()
+
     def add_ir_received_callback(
         self, cb: Callable[[str], Coroutine[None, None, None]]
     ) -> Callable[[], None]:

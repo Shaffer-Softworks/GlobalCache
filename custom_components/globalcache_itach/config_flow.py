@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import uuid
@@ -14,6 +15,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 
 from .client import ItachClient, ItachError
+from .command_util import parse_commands_json
 from .const import (
     CONF_CMD_DATA,
     CONF_CMD_FORMAT,
@@ -206,13 +208,20 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
                 return await self.async_step_remote_name()
             if user_input["next"] == "remove_remote":
                 return await self.async_step_remove_remote()
+            if user_input["next"] == "edit_remote":
+                return await self.async_step_edit_remote()
         # Use vol.In (not SelectSelector dict options) for broad HA version compatibility.
+        opts = self._opts()
+        remotes: list[dict[str, Any]] = list(opts.get(CONF_REMOTES, []))
         menu = {
             "ir_defaults": "IR defaults",
             "timeouts": "Timeouts",
             "add_remote": "Add remote",
+            "edit_remote": "Edit remote",
             "remove_remote": "Remove remote",
         }
+        if not remotes:
+            menu.pop("edit_remote", None)
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({vol.Required("next"): vol.In(menu)}),
@@ -320,18 +329,43 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
         )
         return self.async_show_form(step_id="ir_defaults", data_schema=schema)
 
+    async def async_step_edit_remote(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        opts = self._opts()
+        remotes: list[dict[str, Any]] = list(opts.get(CONF_REMOTES, []))
+        if not remotes:
+            return await self.async_step_init()
+        if user_input is not None:
+            rid = user_input[CONF_REMOTE_ID]
+            found = next(
+                (r for r in remotes if str(r.get(CONF_REMOTE_ID)) == str(rid)),
+                None,
+            )
+            if found is None:
+                return await self.async_step_init()
+            self._remote_draft = copy.deepcopy(found)
+            return await self.async_step_remote_name()
+        choice_map = {
+            str(r[CONF_REMOTE_ID]): str(r.get(CONF_REMOTE_NAME, r[CONF_REMOTE_ID]))[:80]
+            for r in remotes
+        }
+        schema = vol.Schema({vol.Required(CONF_REMOTE_ID): vol.In(choice_map)})
+        return self.async_show_form(step_id="edit_remote", data_schema=schema)
+
     async def async_step_remote_name(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
+        assert self._remote_draft is not None
         if user_input is not None:
-            assert self._remote_draft is not None
             self._remote_draft[CONF_REMOTE_NAME] = user_input[CONF_REMOTE_NAME]
             return await self.async_step_remote_connector()
+        default_name = str(self._remote_draft.get(CONF_REMOTE_NAME, ""))
         return self.async_show_form(
             step_id="remote_name",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_REMOTE_NAME): str,
+                    vol.Required(CONF_REMOTE_NAME, default=default_name): str,
                 }
             ),
         )
@@ -339,31 +373,43 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
     async def async_step_remote_connector(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
+        assert self._remote_draft is not None
         if user_input is not None:
-            assert self._remote_draft is not None
             self._remote_draft[CONF_MODULE] = int(user_input[CONF_MODULE])
             self._remote_draft[CONF_CONN_PORT] = int(user_input[CONF_CONN_PORT])
             self._remote_draft[CONF_IR_COUNT] = int(user_input[CONF_IR_COUNT])
             return await self.async_step_remote_commands()
+        dm = int(self._remote_draft.get(CONF_MODULE, 1))
+        dp = int(self._remote_draft.get(CONF_CONN_PORT, 1))
+        dirc = int(self._remote_draft.get(CONF_IR_COUNT, 1))
         return self.async_show_form(
             step_id="remote_connector",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_MODULE, default=1): selector.NumberSelector(
+                    vol.Required(
+                        CONF_MODULE,
+                        default=dm,
+                    ): selector.NumberSelector(
                         selector.NumberSelectorConfig(
                             mode=selector.NumberSelectorMode.BOX,
                             min=1,
                             max=5,
                         )
                     ),
-                    vol.Required(CONF_CONN_PORT, default=1): selector.NumberSelector(
+                    vol.Required(
+                        CONF_CONN_PORT,
+                        default=dp,
+                    ): selector.NumberSelector(
                         selector.NumberSelectorConfig(
                             mode=selector.NumberSelectorMode.BOX,
                             min=1,
                             max=6,
                         )
                     ),
-                    vol.Required(CONF_IR_COUNT, default=1): selector.NumberSelector(
+                    vol.Required(
+                        CONF_IR_COUNT,
+                        default=dirc,
+                    ): selector.NumberSelector(
                         selector.NumberSelectorConfig(
                             mode=selector.NumberSelectorMode.BOX,
                             min=1,
@@ -378,71 +424,51 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         errors: dict[str, str] = {}
+        assert self._remote_draft is not None
         if user_input is not None:
-            assert self._remote_draft is not None
             raw = user_input["commands_json"]
-            try:
-                parsed = json.loads(raw)
-                if not isinstance(parsed, list):
-                    raise ValueError("commands must be a JSON array")
-                commands: list[dict[str, Any]] = []
-                for item in parsed:
-                    if not isinstance(item, dict):
-                        raise ValueError("each command must be an object")
-                    name = str(item.get(CONF_CMD_NAME, "")).strip()
-                    data = str(item.get(CONF_CMD_DATA, "")).strip()
-                    fmt = str(item.get(CONF_CMD_FORMAT, "pronto")).strip().lower()
-                    allowed = {
-                        "pronto",
-                        "pronto_hex",
-                        "gc_pairs",
-                        "gc_sendir_tail",
-                        "full_sendir",
-                    }
-                    if fmt not in allowed:
-                        raise ValueError(
-                            "format must be pronto, gc_pairs, or full_sendir "
-                            "(aliases pronto_hex, gc_sendir_tail)"
-                        )
-                    if not name or not data:
-                        raise ValueError("name and data are required")
-                    cmd: dict[str, Any] = {
-                        CONF_CMD_NAME: name,
-                        CONF_CMD_DATA: data,
-                        CONF_CMD_FORMAT: fmt,
-                    }
-                    for key in ("freq", "repeat", "offset", "command_id"):
-                        if key in item and item[key] is not None:
-                            cmd[key] = item[key]
-                    commands.append(cmd)
-            except (json.JSONDecodeError, ValueError) as err:
-                errors["base"] = str(err)
-            else:
+            commands, parse_err = parse_commands_json(raw)
+            if parse_err:
+                errors["base"] = parse_err
+            elif commands is not None:
                 opts = self._opts()
                 remotes = list(opts.get(CONF_REMOTES, []))
-                remotes.append(
-                    {
-                        CONF_REMOTE_ID: str(uuid.uuid4()),
-                        CONF_REMOTE_NAME: self._remote_draft[CONF_REMOTE_NAME],
-                        CONF_MODULE: self._remote_draft[CONF_MODULE],
-                        CONF_CONN_PORT: self._remote_draft[CONF_CONN_PORT],
-                        CONF_IR_COUNT: self._remote_draft[CONF_IR_COUNT],
-                        CONF_COMMANDS: commands,
-                    }
-                )
+                existing_id = self._remote_draft.get(CONF_REMOTE_ID)
+                new_remote: dict[str, Any] = {
+                    CONF_REMOTE_ID: str(existing_id)
+                    if existing_id
+                    else str(uuid.uuid4()),
+                    CONF_REMOTE_NAME: self._remote_draft[CONF_REMOTE_NAME],
+                    CONF_MODULE: int(self._remote_draft[CONF_MODULE]),
+                    CONF_CONN_PORT: int(self._remote_draft[CONF_CONN_PORT]),
+                    CONF_IR_COUNT: int(self._remote_draft[CONF_IR_COUNT]),
+                    CONF_COMMANDS: commands,
+                }
+                if existing_id:
+                    eid = str(existing_id)
+                    remotes = [
+                        new_remote if str(r.get(CONF_REMOTE_ID)) == eid else r
+                        for r in remotes
+                    ]
+                else:
+                    remotes.append(new_remote)
                 new_opts = {**opts, CONF_REMOTES: remotes}
                 self._remote_draft = None
                 return self.async_create_entry(title="", data=new_opts)
-        default_json = json.dumps(
-            [
-                {
-                    CONF_CMD_NAME: "power",
-                    CONF_CMD_FORMAT: "pronto",
-                    CONF_CMD_DATA: "0000 006D 0001 0010 00AC 00AC 0015 0040",
-                }
-            ],
-            indent=2,
-        )
+        existing_cmds = self._remote_draft.get(CONF_COMMANDS)
+        if isinstance(existing_cmds, list) and existing_cmds:
+            default_json = json.dumps(existing_cmds, indent=2)
+        else:
+            default_json = json.dumps(
+                [
+                    {
+                        CONF_CMD_NAME: "power",
+                        CONF_CMD_FORMAT: "pronto",
+                        CONF_CMD_DATA: "0000 006D 0001 0010 00AC 00AC 0015 0040",
+                    }
+                ],
+                indent=2,
+            )
         return self.async_show_form(
             step_id="remote_commands",
             data_schema=vol.Schema(

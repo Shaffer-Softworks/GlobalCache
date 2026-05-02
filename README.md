@@ -4,6 +4,8 @@ HACS-ready integration for **Global Caché iTach** TCP/IP-to-IR gateways (e.g. I
 
 Minimum Home Assistant version: **2024.1** (see [`hacs.json`](hacs.json)). The integration is declared as a **`hub`** (gateway) so Home Assistant does not offer a broken **“Add device”** device-subentry flow for a single-purpose TCP bridge.
 
+**Diagnostics in the UI:** the gateway device exposes **TCP connected** (binary), **Last gateway poll** (timestamp, UTC), **Configured remotes** (count), and an optional **Gateway diagnostics** sensor (off by default—enable it to see raw `getdevices` / `getversion` text plus host/port in attributes). On the device page use **⋮ → Download diagnostics** for a JSON bundle (entry data/options, last coordinator snapshot, and live `getversion` / `get_NET` probes).
+
 ## Install
 
 1. Copy [`custom_components/globalcache_itach`](custom_components/globalcache_itach) into your Home Assistant `config/custom_components/` directory, or add this repository to **HACS** as a custom repository (type: Integration).
@@ -37,6 +39,7 @@ To use **mDNS / discovery** for devices on your LAN from the container, you may 
   - **IR defaults**: carrier frequency, repeat, offset, sendir ID policy (auto-increment vs fixed).
   - **Timeouts**: connect and command timeouts.
   - **Add remote**: name, module/port (e.g. `1` and `2` for connector **1:2**), repeat multiplier, and a **JSON array** of commands.
+  - **Edit remote**: pick an existing remote, then adjust name, connector, repeat multiplier, or the same **JSON command list** (saving replaces that remote; entity IDs stay stable).
 
 ### Command JSON format
 

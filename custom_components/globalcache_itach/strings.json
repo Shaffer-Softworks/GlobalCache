@@ -38,15 +38,36 @@
         "title": "Commands (JSON)",
         "description": "{hint}"
       },
+      "edit_remote": {
+        "title": "Edit remote",
+        "description": "Choose a remote to change its name, IR connector, or command list.",
+        "data": {
+          "remote_id": "Remote"
+        }
+      },
       "remove_remote": {
-        "title": "Remove remote"
+        "title": "Remove remote",
+        "data": {
+          "remote_id": "Remote"
+        }
       }
     }
   },
   "entity": {
+    "binary_sensor": {
+      "tcp_connected": {
+        "name": "TCP connected"
+      }
+    },
     "sensor": {
       "gateway_diagnostics": {
         "name": "Gateway diagnostics"
+      },
+      "last_poll": {
+        "name": "Last gateway poll"
+      },
+      "configured_remotes": {
+        "name": "Configured remotes"
       }
     }
   },

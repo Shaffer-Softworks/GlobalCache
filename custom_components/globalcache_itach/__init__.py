@@ -53,7 +53,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[str] = ["remote", "sensor"]
+PLATFORMS: list[str] = ["binary_sensor", "remote", "sensor"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -116,6 +116,13 @@ async def async_get_config_entry_diagnostics(
     )
     if coordinator is not None:
         out["last_devices_response"] = coordinator.data
+        out["coordinator"] = {
+            "tcp_connected": coordinator.client.is_connected,
+            "last_update_success": coordinator.last_update_success,
+            "update_interval_seconds": coordinator.update_interval.total_seconds()
+            if coordinator.update_interval
+            else None,
+        }
     client = ItachClient(
         entry.data[CONF_GCI_HOST],
         int(entry.data[CONF_GCI_PORT]),
