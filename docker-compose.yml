@@ -1,0 +1,21 @@
+# Home Assistant with this repo's Global Caché iTach integration mounted read-only.
+# Usage: docker compose up -d
+# UI: http://localhost:8123
+
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: ha-globalcache-itach
+    restart: unless-stopped
+    # Do not use init: true — Home Assistant's s6-overlay must run as PID 1
+    # ("s6-overlay-suexec: fatal: can only run as pid 1" otherwise).
+    ports:
+      - "8123:8123"
+    volumes:
+      # Persistent HA configuration (database, UI-created config, etc.)
+      - ./docker_data/config:/config
+      # Live mount of the integration from the repository (no copy step)
+      - ./custom_components/globalcache_itach:/config/custom_components/globalcache_itach:ro
+    environment:
+      # Override in shell: TZ=America/New_York docker compose up -d
+      TZ: UTC

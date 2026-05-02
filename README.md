@@ -1,0 +1,101 @@
+# Global Caché iTach (Home Assistant custom integration)
+
+HACS-ready integration for **Global Caché iTach** TCP/IP-to-IR gateways (e.g. IP2IR). It adds a **config flow** (including optional **connect timeout**), **options flow** for IR defaults and remotes, **`remote` entities** (Pronto, GC pulse pairs, or a full **`sendir,...` line**), **`async_stop`** / **STOP** when supported by Home Assistant, a **diagnostic sensor** (disabled by default), and **services** covering the TCP API including **LED** commands and a **`send_command`** alias for raw lines.
+
+Minimum Home Assistant version: **2024.1** (see [`hacs.json`](hacs.json)). The integration is declared as a **`hub`** (gateway) so Home Assistant does not offer a broken **“Add device”** device-subentry flow for a single-purpose TCP bridge.
+
+## Install
+
+1. Copy [`custom_components/globalcache_itach`](custom_components/globalcache_itach) into your Home Assistant `config/custom_components/` directory, or add this repository to **HACS** as a custom repository (type: Integration).
+2. Restart Home Assistant.
+3. Go to **Settings → Devices & services → Add integration** and search for **Global Caché iTach**.
+
+## Run with Docker
+
+From the repository root (Docker Desktop or another engine with Compose v2):
+
+```bash
+docker compose up -d
+```
+
+Open [http://localhost:8123](http://localhost:8123), complete the onboarding wizard, then add **Global Caché iTach** under **Settings → Devices & services**.
+
+- **Config volume**: [`docker_data/config`](docker_data/config) stores Home Assistant’s full `/config` (ignored by git except [`.gitkeep`](docker_data/config/.gitkeep)).
+- **Integration mount**: the container bind-mounts [`custom_components/globalcache_itach`](custom_components/globalcache_itach) into `/config/custom_components/globalcache_itach` read-only so edits in the repo are visible after **Developer tools → YAML → Restart** (or a container restart).
+
+```bash
+docker compose logs -f homeassistant
+docker compose down
+```
+
+To use **mDNS / discovery** for devices on your LAN from the container, you may need `network_mode: host` (Linux only) or extra `cap_add` / macvlan setups; for a fixed iTach IP, bridge networking is usually enough.
+
+## Configure
+
+- **First step**: host (IP, hostname, or mDNS name), TCP port (default **4998**), optional friendly name, optional **connect timeout**. The integration validates the device with `getdevices` / `getversion`.
+- **Options** (gear on the integration card):
+  - **IR defaults**: carrier frequency, repeat, offset, sendir ID policy (auto-increment vs fixed).
+  - **Timeouts**: connect and command timeouts.
+  - **Add remote**: name, module/port (e.g. `1` and `2` for connector **1:2**), repeat multiplier, and a **JSON array** of commands.
+
+### Command JSON format
+
+Each command is an object:
+
+| Field | Required | Description |
+|--------|----------|-------------|
+| `name` | yes | Used with `remote.send_command` (matched case-insensitively). |
+| `data` | yes | Pronto hex, comma-separated GC pulse pairs, or a full `sendir,...` line (no trailing CR) when using `full_sendir`. |
+| `format` | no | `pronto` (alias `pronto_hex`), `gc_pairs` (alias `gc_sendir_tail`), or `full_sendir`. |
+| `freq`, `repeat`, `offset`, `command_id` | no | Overrides for that command only. |
+
+Example:
+
+```json
+[
+  {
+    "name": "power",
+    "format": "pronto",
+    "data": "0000 006D 0000 0022 00AC 00AC 0015 0040"
+  }
+]
+```
+
+### More than on/off on the dashboard
+
+The default **device** view only shows generic **remote** actions (toggle / lightning). **All JSON `name` values** are still real commands: call **`remote.send_command`** with `command: ["power"]` (or several names in order). This integration also sets **`activity_list`** from those names so **`remote.turn_on`** accepts an **`activity`** field with the same name (Harmony-style). For a visible grid of buttons, add **Button** cards (or similar) on a Lovelace dashboard, each calling **`remote.send_command`** for one command.
+
+## API mapping (iTach TCP ↔ Home Assistant)
+
+| iTach / unified TCP | Home Assistant |
+|---------------------|----------------|
+| `sendir` (Pronto → GC conversion) | `remote.send_command`, structured `globalcache_itach.sendir` service |
+| `completeir` / `busyIR` | Handled internally in the TCP client |
+| `stopir` | `globalcache_itach.stop_ir` service and **`remote` stop** (`async_stop` / STOP) when the HA version exposes it |
+| `set_LED_LIGHTING` / `get_LED_LIGHTING` | `globalcache_itach.set_led_lighting` / `get_led_lighting` |
+| `get_IR` / `set_IR` | `globalcache_itach.get_ir` / `globalcache_itach.set_ir` |
+| `get_IRL` / `stop_IRL` | `globalcache_itach.ir_learner_start` / `ir_learner_stop` (+ bus event `globalcache_itach_ir_learned`) |
+| `receiveIR` | `globalcache_itach.receive_ir` (+ bus event `globalcache_itach_ir_received` when unsolicited `sendir`/`IR` lines arrive) |
+| `getdevices`, `getversion`, `get_NET` | Coordinator refresh, **Gateway diagnostics** sensor (off by default), diagnostics download, and `get_devices` / `get_version` / `get_net` services |
+| Arbitrary ASCII line | `globalcache_itach.send_raw` or **`send_command`** (same behaviour; collects lines for `collect_seconds`) |
+
+Protocol reference: [iTach API (PDF)](https://www.globalcache.com/files/docs/API-iTach.pdf), [Unified TCP API (PDF)](https://globalcache.com/files/docs/API-GC-UnifiedTCPv1.1.pdf).
+
+## Limitations
+
+- One **serialized** TCP client per config entry with **connect retries** and **EOF recovery** so the next command opens a new session. Multiple Home Assistant instances or other controllers talking to the same iTach can still contend on port **4998**.
+- **IP2SL / IP2CC** features are not modeled as first-class platforms; use **`send_raw`** or vendor tools for serial/relay on other SKUs.
+- **IR learner** output is exposed via events and logs; it does not replace Global Caché’s **iLearn** utility for every workflow.
+
+## Development
+
+```bash
+pip install pytest pytest-asyncio voluptuous
+pytest tests/
+```
+
+The test suite exercises **Pronto parsing** and the **async TCP client** against a fake iTach server (no Home Assistant install required for those tests).
+
+## Legal
+
+“Global Caché” and “iTach” are trademarks of their respective owners. This project is an independent open-source integration and is not affiliated with Global Caché.
