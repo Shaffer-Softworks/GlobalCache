@@ -1,0 +1,125 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Global Caché iTach",
+        "description": "Enter the IP address or hostname of your iTach (TCP port 4998 by default)."
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect or query the device. Check the address, port, and network."
+    },
+    "abort": {
+      "already_configured": "This iTach is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "iTach options",
+        "description": "Adjust IR defaults, timeouts, or manage remotes.",
+        "data": {
+          "next": "Choose an action"
+        }
+      },
+      "timeouts": {
+        "title": "Timeouts"
+      },
+      "ir_defaults": {
+        "title": "IR defaults"
+      },
+      "remote_name": {
+        "title": "Remote name"
+      },
+      "remote_connector": {
+        "title": "IR connector"
+      },
+      "remote_commands": {
+        "title": "Commands (JSON)",
+        "description": "{hint}"
+      },
+      "remove_remote": {
+        "title": "Remove remote"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "gateway_diagnostics": {
+        "name": "Gateway diagnostics"
+      }
+    }
+  },
+  "services": {
+    "send_raw": {
+      "name": "Send raw TCP command",
+      "description": "Send an ASCII line to port 4998 and collect responses for a short time.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The iTach gateway device."
+        },
+        "command": {
+          "name": "Command",
+          "description": "Command line (carriage return is added if missing)."
+        },
+        "collect_seconds": {
+          "name": "Collect duration",
+          "description": "How long to buffer response lines after sending."
+        }
+      }
+    },
+    "sendir": {
+      "name": "Send structured sendir",
+      "description": "Send a full sendir with explicit parameters."
+    },
+    "stop_ir": {
+      "name": "Stop IR",
+      "description": "Send stopir for a connector."
+    },
+    "ir_learner_start": {
+      "name": "IR learner start",
+      "description": "Enable the built-in IR learner (get_IRL)."
+    },
+    "ir_learner_stop": {
+      "name": "IR learner stop",
+      "description": "Disable IR learner (stop_IRL)."
+    },
+    "receive_ir": {
+      "name": "IR receive mode",
+      "description": "Enable or disable receiveIR streaming for automations."
+    },
+    "get_ir": {
+      "name": "Get IR port mode",
+      "description": "Query get_IR for a connector."
+    },
+    "set_ir": {
+      "name": "Set IR port mode",
+      "description": "Apply set_IR mode (IR, SENSOR, IR_BLASTER, etc.)."
+    },
+    "get_devices": {
+      "name": "List modules",
+      "description": "Run getdevices."
+    },
+    "get_version": {
+      "name": "Firmware version",
+      "description": "Run getversion for a module."
+    },
+    "get_net": {
+      "name": "Network settings",
+      "description": "Run get_NET,0:1."
+    },
+    "send_command": {
+      "name": "Send TCP command (alias)",
+      "description": "Same as send_raw; for parity with Global Caché documentation naming."
+    },
+    "set_led_lighting": {
+      "name": "Set LED lighting",
+      "description": "set_LED_LIGHTING for a connector in LED_LIGHTING mode (intensity 0–100, ramp 0–10)."
+    },
+    "get_led_lighting": {
+      "name": "Get LED lighting",
+      "description": "get_LED_LIGHTING for a connector."
+    }
+  }
+}

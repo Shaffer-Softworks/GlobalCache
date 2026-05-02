@@ -1,0 +1,84 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Global Caché iTach",
+        "description": "Enter the IP address or hostname of your iTach (TCP port 4998 by default).",
+        "data": {
+          "host": "Host or mDNS name",
+          "port": "TCP port",
+          "device_name": "Name (optional)",
+          "connect_timeout": "Connection timeout (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect or query the device. Check the address, port, and network."
+    },
+    "abort": {
+      "already_configured": "This iTach is already configured."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "gateway_diagnostics": {
+        "name": "Gateway diagnostics"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "iTach options",
+        "description": "Adjust IR defaults, timeouts, or manage remotes.",
+        "data": {
+          "next": "Action"
+        }
+      },
+      "timeouts": {
+        "title": "Timeouts",
+        "data": {
+          "connect_timeout": "Connect timeout (seconds)",
+          "command_timeout": "Command timeout (seconds)"
+        }
+      },
+      "ir_defaults": {
+        "title": "IR defaults",
+        "data": {
+          "default_freq": "Default carrier (Hz)",
+          "default_repeat": "Default repeat",
+          "default_offset": "Default offset",
+          "id_policy": "sendir ID policy",
+          "fixed_command_id": "Fixed ID (when policy is fixed)"
+        }
+      },
+      "remote_name": {
+        "title": "Remote name",
+        "data": {
+          "name": "Name"
+        }
+      },
+      "remote_connector": {
+        "title": "IR connector",
+        "data": {
+          "module": "Module address",
+          "port": "Port (1–3 on IP2IR)",
+          "ir_count": "Repeat multiplier (per send)"
+        }
+      },
+      "remote_commands": {
+        "title": "Commands",
+        "description": "{hint}",
+        "data": {
+          "commands_json": "JSON array of commands"
+        }
+      },
+      "remove_remote": {
+        "title": "Remove remote",
+        "data": {
+          "remote_id": "Remote"
+        }
+      }
+    }
+  }
+}

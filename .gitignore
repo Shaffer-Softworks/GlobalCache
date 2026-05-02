@@ -1,0 +1,8 @@
+# Home Assistant runtime data (created on first container start)
+docker_data/config/*
+!docker_data/config/.gitkeep
+
+.pytest_cache/
+__pycache__/
+*.pyc
+.venv/

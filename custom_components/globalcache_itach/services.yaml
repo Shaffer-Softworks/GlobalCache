@@ -1,0 +1,322 @@
+# Actions / services (device_id = iTach gateway from Devices & services)
+
+send_raw:
+  name: Send raw TCP command
+  description: >-
+    Send a line to TCP 4998. A carriage return is appended if missing.
+    Response lines are collected for collect_seconds.
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    command:
+      required: true
+      example: "getdevices"
+      selector:
+        text:
+    collect_seconds:
+      default: 2
+      selector:
+        number:
+          min: 0.1
+          max: 30
+          step: 0.1
+          unit_of_measurement: s
+
+send_command:
+  name: Send TCP command (alias of send_raw)
+  description: Same fields as send_raw; alias for documentation-friendly naming.
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    command:
+      required: true
+      selector:
+        text:
+    collect_seconds:
+      default: 2
+      selector:
+        number:
+          min: 0.1
+          max: 30
+          step: 0.1
+          unit_of_measurement: s
+
+sendir:
+  name: Send structured sendir
+  description: Full sendir with explicit module, port, ID, frequency, repeat, offset, and pulse pairs.
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+    command_id:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 65535
+          mode: box
+    frequency:
+      required: true
+      selector:
+        number:
+          min: 15000
+          max: 500000
+          step: 1000
+          mode: box
+          unit_of_measurement: Hz
+    repeat:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 50
+          mode: box
+    offset:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 383
+          step: 2
+          mode: box
+    pulse_pairs:
+      required: true
+      example: "350,175,20,60"
+      selector:
+        text:
+
+stop_ir:
+  name: Stop IR transmission
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+
+ir_learner_start:
+  name: Start IR learner
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+
+ir_learner_stop:
+  name: Stop IR learner
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+
+receive_ir:
+  name: IR receive mode
+  description: Enable or disable receiveIR. When enabled, received codes fire event globalcache_itach_ir_received.
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+    enabled:
+      required: true
+      selector:
+        boolean:
+
+get_ir:
+  name: Get IR connector mode
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+
+set_ir:
+  name: Set IR connector mode
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+    mode:
+      required: true
+      example: "IR"
+      selector:
+        text:
+
+get_devices:
+  name: getdevices
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+
+get_version:
+  name: getversion
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      default: "0"
+      selector:
+        text:
+
+get_net:
+  name: get_NET
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+
+set_led_lighting:
+  name: set_LED_LIGHTING
+  description: >-
+    PWM LED control on a connector configured as LED_LIGHTING (see Global Caché API).
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+    intensity:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: box
+          unit_of_measurement: "%"
+    ramp:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 10
+          mode: box
+
+get_led_lighting:
+  name: get_LED_LIGHTING
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
