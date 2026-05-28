@@ -11,6 +11,28 @@
           "connect_timeout": "Connection timeout (seconds)"
         }
       },
+      "pick_device": {
+        "title": "Select gateway",
+        "description": "Choose a gateway discovered on your network, or enter an address manually.",
+        "data": {
+          "device": "Gateway"
+        }
+      },
+      "confirm": {
+        "title": "Confirm gateway",
+        "description": "Set up {model} at {host} (ID {uuid})?",
+        "data": {
+          "device_name": "Name (optional)"
+        }
+      },
+      "dhcp": {
+        "title": "Discovered Global Caché gateway",
+        "description": "A Global Caché device was found on your network."
+      },
+      "discovery": {
+        "title": "Discovered Global Caché gateway",
+        "description": "A Global Caché device was found on your network."
+      },
       "reconfigure": {
         "title": "Update connection",
         "description": "Change the gateway IP or hostname. The integration will reconnect and refresh device capabilities.",
@@ -26,7 +48,9 @@
       "cannot_connect": "Could not connect or query the device. Check the address, port, and network."
     },
     "abort": {
-      "already_configured": "Another entry already uses this host and port."
+      "already_configured": "This gateway is already configured.",
+      "already_in_progress": "Setup for this gateway is already in progress.",
+      "cannot_connect": "Could not connect or query the discovered device."
     }
   },
   "entity": {

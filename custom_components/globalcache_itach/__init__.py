@@ -73,6 +73,14 @@ PLATFORMS: list[str] = [
 ]
 
 
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Start UDP multicast discovery when the domain loads."""
+    from .discovery import async_setup_discovery
+
+    await async_setup_discovery(hass)
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up from UI."""
     from homeassistant.helpers import device_registry as dr
