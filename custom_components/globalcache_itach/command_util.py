@@ -5,7 +5,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .const import CONF_CMD_DATA, CONF_CMD_FORMAT, CONF_CMD_NAME, CONF_COMMANDS
+from .const import (
+    CONF_CMD_DATA,
+    CONF_CMD_FORMAT,
+    CONF_CMD_NAME,
+    CONF_COMMANDS,
+    CONF_SERIAL_PAYLOAD,
+)
 
 
 def parse_commands_json(raw: str) -> tuple[list[dict[str, Any]] | None, str | None]:
@@ -66,3 +72,28 @@ def activity_labels_from_spec(spec: dict[str, Any]) -> list[str]:
         seen.add(key)
         labels.append(raw)
     return sorted(labels, key=str.casefold)
+
+
+def parse_serial_commands_json(
+    raw: str,
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Validate serial preset JSON: [{name, payload}, ...]. Empty array is allowed."""
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as err:
+        return None, str(err)
+    if not isinstance(parsed, list):
+        return None, "commands must be a JSON array"
+    commands: list[dict[str, Any]] = []
+    try:
+        for item in parsed:
+            if not isinstance(item, dict):
+                raise ValueError("each command must be an object")
+            name = str(item.get(CONF_CMD_NAME, "")).strip()
+            payload = str(item.get(CONF_SERIAL_PAYLOAD, "")).strip()
+            if not name or not payload:
+                raise ValueError("name and payload are required")
+            commands.append({CONF_CMD_NAME: name, CONF_SERIAL_PAYLOAD: payload})
+    except ValueError as err:
+        return None, str(err)
+    return commands, None

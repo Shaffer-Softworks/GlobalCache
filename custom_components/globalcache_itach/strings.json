@@ -4,20 +4,24 @@
       "user": {
         "title": "Global Caché iTach",
         "description": "Enter the IP address or hostname of your iTach (TCP port 4998 by default)."
+      },
+      "reconfigure": {
+        "title": "Update connection",
+        "description": "Change the gateway IP or hostname. The integration will reconnect and refresh device capabilities."
       }
     },
     "error": {
       "cannot_connect": "Could not connect or query the device. Check the address, port, and network."
     },
     "abort": {
-      "already_configured": "This iTach is already configured."
+      "already_configured": "Another entry already uses this host and port."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "iTach options",
-        "description": "Adjust IR defaults, timeouts, or manage remotes.",
+        "description": "Adjust IR defaults, timeouts, remotes, relays, or serial ports.",
         "data": {
           "next": "Choose an action"
         }
@@ -32,7 +36,8 @@
         "title": "Remote name"
       },
       "remote_connector": {
-        "title": "IR connector"
+        "title": "IR connector",
+        "description": "{ir_hint}"
       },
       "remote_commands": {
         "title": "Commands (JSON)",
@@ -49,6 +54,56 @@
         "title": "Remove remote",
         "data": {
           "remote_id": "Remote"
+        }
+      },
+      "relay_name": {
+        "title": "Relay name"
+      },
+      "relay_connector": {
+        "title": "Relay connector"
+      },
+      "edit_relay": {
+        "title": "Edit relay",
+        "description": "Change name or module/port for a configured relay.",
+        "data": {
+          "relay_id": "Relay"
+        }
+      },
+      "remove_relay": {
+        "title": "Remove relay",
+        "data": {
+          "relay_id": "Relay"
+        }
+      },
+      "serial_name": {
+        "title": "Serial port name"
+      },
+      "serial_connector": {
+        "title": "Serial connector"
+      },
+      "serial_settings": {
+        "title": "Serial line settings",
+        "data": {
+          "serial_settings": "Parameters (get_SERIAL / set_SERIAL)",
+          "append_cr": "Append CR to each send",
+          "monitor_incoming": "Monitor incoming data (persistent connection)"
+        }
+      },
+      "serial_commands": {
+        "title": "Serial presets (JSON)",
+        "description": "{hint}"
+      },
+      "edit_serial": {
+        "title": "Edit serial port",
+        "description": "Change name, connector, line settings, or preset buttons.",
+        "data": {
+          "serial_id": "Serial port"
+        }
+      },
+      "remove_serial": {
+        "title": "Remove serial port",
+        "data": {
+          "serial_id": "Serial port"
         }
       }
     }
@@ -68,6 +123,9 @@
       },
       "configured_remotes": {
         "name": "Configured remotes"
+      },
+      "serial_last_received": {
+        "name": "Last received"
       }
     }
   },
@@ -141,6 +199,30 @@
     "get_led_lighting": {
       "name": "Get LED lighting",
       "description": "get_LED_LIGHTING for a connector."
+    },
+    "send_serial": {
+      "name": "Send serial payload",
+      "description": "Send on the serial data port (control port + module)."
+    },
+    "get_serial": {
+      "name": "Get serial parameters",
+      "description": "Run get_SERIAL for a connector."
+    },
+    "set_serial": {
+      "name": "Set serial parameters",
+      "description": "Run set_SERIAL (baud, flow, parity, …)."
+    },
+    "set_relay": {
+      "name": "Set relay",
+      "description": "setstate for a relay/contact connector."
+    },
+    "get_relay": {
+      "name": "Get relay",
+      "description": "getstate for a relay/contact connector."
+    },
+    "pulse_relay": {
+      "name": "Pulse relay",
+      "description": "Turn relay on briefly then off."
     }
   }
 }
