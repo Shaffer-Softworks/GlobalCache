@@ -10,6 +10,7 @@ DEFAULT_CARRIER_HZ: Final = 38000
 DEFAULT_REPEAT: Final = 1
 DEFAULT_OFFSET: Final = 1
 
+CONF_DEVICE_MODULES: Final = "device_modules"
 CONF_HOST: Final = "host"
 CONF_PORT: Final = "port"
 CONF_DEVICE_NAME: Final = "device_name"
@@ -24,6 +25,28 @@ CONF_ID_POLICY: Final = "id_policy"
 CONF_FIXED_COMMAND_ID: Final = "fixed_command_id"
 
 CONF_REMOTES: Final = "remotes"
+CONF_RELAYS: Final = "relays"
+CONF_RELAY_ID: Final = "relay_id"
+CONF_RELAY_NAME: Final = "name"
+CONF_SERIAL_PORTS: Final = "serial_ports"
+CONF_SERIAL_ID: Final = "serial_id"
+CONF_SERIAL_NAME: Final = "name"
+CONF_SERIAL_SETTINGS: Final = "serial_settings"
+CONF_SERIAL_COMMANDS: Final = "commands"
+CONF_SERIAL_PAYLOAD: Final = "payload"
+CONF_SERIAL_APPEND_CR: Final = "append_cr"
+CONF_SERIAL_LISTEN: Final = "monitor_incoming"
+_LEGACY_SERIAL_LISTEN: Final = "listen"
+DEFAULT_SERIAL_SETTINGS: Final = "9600,FLOW_NONE,PARITY_NONE"
+
+
+def serial_listen_enabled(spec: dict) -> bool:
+    """Whether RX monitoring is on (supports legacy ``listen`` option key)."""
+    if CONF_SERIAL_LISTEN in spec:
+        return bool(spec[CONF_SERIAL_LISTEN])
+    if _LEGACY_SERIAL_LISTEN in spec:
+        return bool(spec[_LEGACY_SERIAL_LISTEN])
+    return True
 CONF_REMOTE_ID: Final = "remote_id"
 CONF_REMOTE_NAME: Final = "name"
 CONF_MODULE: Final = "module"
@@ -44,6 +67,7 @@ ID_POLICY_FIXED: Final = "fixed"
 
 EVENT_IR_LEARNED: Final = f"{DOMAIN}_ir_learned"
 EVENT_IR_RECEIVED: Final = f"{DOMAIN}_ir_received"
+EVENT_SERIAL_RECEIVED: Final = f"{DOMAIN}_serial_received"
 
 SERVICE_SEND_RAW: Final = "send_raw"
 SERVICE_SEND_COMMAND: Final = "send_command"
@@ -59,6 +83,17 @@ SERVICE_GET_VERSION: Final = "get_version"
 SERVICE_GET_NET: Final = "get_net"
 SERVICE_SET_LED_LIGHTING: Final = "set_led_lighting"
 SERVICE_GET_LED_LIGHTING: Final = "get_led_lighting"
+SERVICE_SEND_SERIAL: Final = "send_serial"
+SERVICE_GET_SERIAL: Final = "get_serial"
+SERVICE_SET_SERIAL: Final = "set_serial"
+SERVICE_SET_RELAY: Final = "set_relay"
+SERVICE_GET_RELAY: Final = "get_relay"
+SERVICE_PULSE_RELAY: Final = "pulse_relay"
+
+ATTR_PAYLOAD: Final = "payload"
+ATTR_SETTINGS: Final = "settings"
+ATTR_ON: Final = "on"
+ATTR_PULSE_SECONDS: Final = "pulse_seconds"
 
 ATTR_DEVICE_ID: Final = "device_id"
 ATTR_COMMAND: Final = "command"

@@ -30,16 +30,26 @@ def pronto_to_gc_sendir_tail(pronto_hex: str) -> tuple[int, list[int]]:
         carrier_hz = max(15000, min(500_000, carrier_hz))
     seq1_len = codes[2]
     seq2_len = codes[3]
-    _ = seq1_len, seq2_len  # lengths in some encodings; we consume all trailing pairs
     pairs: list[int] = []
     idx = 4
-    while idx + 1 < len(codes):
-        on_u = codes[idx]
-        off_u = codes[idx + 1]
-        on_pulses = max(1, round(on_u * PRONTO_US_PER_UNIT * carrier_hz / 1_000_000))
-        off_pulses = max(1, round(off_u * PRONTO_US_PER_UNIT * carrier_hz / 1_000_000))
-        pairs.extend((on_pulses, off_pulses))
-        idx += 2
+
+    def append_pairs(pair_count: int) -> None:
+        nonlocal idx
+        for _ in range(pair_count):
+            if idx + 1 >= len(codes):
+                msg = "Pronto data ended before sequence length was satisfied"
+                raise ValueError(msg)
+            on_u = codes[idx]
+            off_u = codes[idx + 1]
+            # iTach sendir expects Pronto timing words as pulse counts (see HA core
+            # itach / Global Caché iConvert), not microsecond-derived values.
+            on_pulses = max(1, int(on_u))
+            off_pulses = max(1, int(off_u))
+            pairs.extend((on_pulses, off_pulses))
+            idx += 2
+
+    append_pairs(seq1_len)
+    append_pairs(seq2_len)
     if not pairs:
         msg = "No timing pairs found after Pronto header"
         raise ValueError(msg)

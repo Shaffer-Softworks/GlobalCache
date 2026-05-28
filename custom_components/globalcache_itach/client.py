@@ -8,6 +8,8 @@ import re
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING
 
+from .device_util import format_unknown_command
+
 if TYPE_CHECKING:
     from types import TracebackType
 
@@ -19,14 +21,34 @@ COMPLETEIR_RE = re.compile(
 )
 BUSYIR_RE = re.compile(r"^busyIR,(\d+):(\d+),(\d+)\s*$", re.IGNORECASE)
 UNKNOWN_RE = re.compile(r"^unknowncommand", re.IGNORECASE)
+ERR_RE = re.compile(r"^err_", re.IGNORECASE)
+# GC-100 answers getstate/setstate with ``state,...``; iTach often echoes ``setstate,...``.
+RELAY_STATE_RE = re.compile(
+    r"^(?:set)?state,(\d+):(\d+),([01])\s*$", re.IGNORECASE
+)
 SENDIR_HEAD_RE = re.compile(
     r"^sendir,(\d+):(\d+),(\d+),",
     re.IGNORECASE,
 )
+SERIAL_LINE_RE = re.compile(r"^serial,", re.IGNORECASE)
 
 
 class ItachError(Exception):
     """Protocol or device error."""
+
+
+def parse_relay_state_line(line: str) -> bool:
+    """Parse ``state`` / ``setstate`` relay lines (GC-100 vs iTach)."""
+    m = RELAY_STATE_RE.match(line.strip())
+    if not m:
+        msg = f"Unexpected relay state line: {line}"
+        raise ItachError(msg)
+    return m.group(3) == "1"
+
+
+def serial_data_port(control_port: int, module: int) -> int:
+    """Unified TCP: serial payload socket is control port + module address."""
+    return control_port + module
 
 
 class ItachClient:
@@ -225,7 +247,7 @@ class ItachClient:
             if predicate(line):
                 return lines
             if UNKNOWN_RE.match(line):
-                msg = f"iTach error: {line}"
+                msg = format_unknown_command(line)
                 raise ItachError(msg)
 
     def _norm_cmd(self, command: str) -> bytes:
@@ -271,6 +293,98 @@ class ItachClient:
     async def getversion(self, module: str = "0") -> list[str]:
         lines = await self.send_raw(f"getversion,{module}", timeout=self._command_timeout)
         return lines
+
+    async def get_relay_state(self, module: int, port: int) -> bool:
+        """Query relay/contact state (``getstate`` → ``setstate,...``)."""
+        lines = await self.send_raw(
+            f"getstate,{module}:{port}",
+            end_on=lambda ln: RELAY_STATE_RE.match(ln.strip()) is not None
+            or UNKNOWN_RE.match(ln.strip()) is not None,
+            timeout=self._command_timeout,
+        )
+        for ln in reversed(lines):
+            if RELAY_STATE_RE.match(ln.strip()):
+                return parse_relay_state_line(ln)
+        msg = f"No relay state in response: {lines}"
+        raise ItachError(msg)
+
+    async def set_relay_state(self, module: int, port: int, on: bool) -> bool:
+        """Set relay on/off; returns resulting state."""
+        val = "1" if on else "0"
+        cmd = f"setstate,{module}:{port},{val}"
+        lines = await self.send_raw(
+            cmd,
+            end_on=lambda ln: RELAY_STATE_RE.match(ln.strip()) is not None
+            or UNKNOWN_RE.match(ln.strip()) is not None,
+            timeout=self._command_timeout,
+        )
+        for ln in reversed(lines):
+            if RELAY_STATE_RE.match(ln.strip()):
+                return parse_relay_state_line(ln)
+        msg = f"No relay state in response: {lines}"
+        raise ItachError(msg)
+
+    async def get_serial_settings(self, module: int, port: int) -> str:
+        lines = await self.send_raw(
+            f"get_SERIAL,{module}:{port}",
+            end_on=lambda ln: SERIAL_LINE_RE.match(ln.strip()) is not None
+            or UNKNOWN_RE.match(ln.strip()) is not None,
+            timeout=self._command_timeout,
+        )
+        for ln in reversed(lines):
+            if SERIAL_LINE_RE.match(ln.strip()):
+                return ln.strip()
+        msg = f"No SERIAL line in response: {lines}"
+        raise ItachError(msg)
+
+    async def set_serial_settings(
+        self, module: int, port: int, settings: str
+    ) -> str:
+        lines = await self.send_raw(
+            f"set_SERIAL,{module}:{port},{settings.strip()}",
+            end_on=lambda ln: SERIAL_LINE_RE.match(ln.strip()) is not None
+            or UNKNOWN_RE.match(ln.strip()) is not None,
+            timeout=self._command_timeout,
+        )
+        for ln in reversed(lines):
+            if SERIAL_LINE_RE.match(ln.strip()):
+                return ln.strip()
+        msg = f"No SERIAL line in response: {lines}"
+        raise ItachError(msg)
+
+    async def send_serial_payload(
+        self,
+        module: int,
+        payload: str,
+        *,
+        append_cr: bool = True,
+        timeout: float | None = None,
+    ) -> str:
+        """Send ASCII on the serial data port (control port + module)."""
+        tout = timeout if timeout is not None else self._command_timeout
+        data_port = serial_data_port(self._port, module)
+        wire = payload.encode("ascii", errors="replace")
+        if append_cr and not wire.endswith(b"\r"):
+            wire += b"\r"
+        async with self._write_lock:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self._host, data_port),
+                timeout=self._connect_timeout,
+            )
+            try:
+                writer.write(wire)
+                await writer.drain()
+                try:
+                    chunk = await asyncio.wait_for(reader.read(4096), timeout=tout)
+                except TimeoutError:
+                    return ""
+                return chunk.decode("ascii", errors="replace").strip()
+            finally:
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except OSError:
+                    pass
 
     async def _await_completeir_after_write(
         self,
@@ -318,8 +432,12 @@ class ItachClient:
                     except TimeoutError:
                         continue
                     collected.append(line)
-                    if UNKNOWN_RE.match(line.strip()):
-                        msg = f"sendir failed: {line}"
+                    stripped = line.strip()
+                    if UNKNOWN_RE.match(stripped):
+                        msg = f"sendir failed: {format_unknown_command(line)}"
+                        raise ItachError(msg)
+                    if ERR_RE.match(stripped):
+                        msg = f"sendir failed: {stripped}"
                         raise ItachError(msg)
                     if BUSYIR_RE.match(line.strip()):
                         await asyncio.sleep(0.05)
