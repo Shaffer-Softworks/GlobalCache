@@ -9,7 +9,7 @@ Custom integration for **Global Caché iTach / GC-100** gateways over TCP (defau
 - **Domain:** `globalcache_itach`
 - **Minimum HA:** see [`hacs.json`](hacs.json) (currently 2024.1)
 - **Manifest:** [`manifest.json`](custom_components/globalcache_itach/manifest.json) — `integration_type: hub`, version **1.0.0**
-- **Repo layout:** [`custom_components/globalcache_itach/`](custom_components/globalcache_itach/), [`tests/`](tests/) (29 tests), [`docker-compose.yml`](docker-compose.yml), [`README.md`](README.md)
+- **Repo layout:** [`custom_components/globalcache_itach/`](custom_components/globalcache_itach/), [`tests/`](tests/) (32 tests), [`docs/images/`](docs/images/) (README screenshots), [`docker-compose.yml`](docker-compose.yml), [`README.md`](README.md)
 
 ## Platforms
 
@@ -26,7 +26,7 @@ Custom integration for **Global Caché iTach / GC-100** gateways over TCP (defau
 | Persistent serial data-port RX | [`serial_session.py`](custom_components/globalcache_itach/serial_session.py) |
 | `getdevices` parsing, IR module checks | [`device_util.py`](custom_components/globalcache_itach/device_util.py) |
 | Stale entity cleanup (options-driven) | [`entity_registry_util.py`](custom_components/globalcache_itach/entity_registry_util.py) |
-| `remote` / `switch` / `text` / `button` / `sensor` | respective `*.py` |
+| `remote` / `switch` / `text` / `button` / `sensor` / `binary_sensor` | respective `*.py` |
 | Pronto / GC pair conversion | [`pronto.py`](custom_components/globalcache_itach/pronto.py) |
 | Services schema | [`services.yaml`](custom_components/globalcache_itach/services.yaml) |
 | UI strings | [`strings.json`](custom_components/globalcache_itach/strings.json), [`translations/en.json`](custom_components/globalcache_itach/translations/en.json) |
@@ -79,19 +79,38 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 
 9. **Reconfigure** — **⋮ → Reconfigure** updates host/port/name/timeouts, refreshes `device_modules`, reloads entry.
 
+10. **README screenshots** — PNGs in [`docs/images/`](docs/images/), driven by [`docs/screenshot-manifest.yaml`](docs/screenshot-manifest.yaml). Regenerate with `HA_REFRESH_TOKEN=… python3 scripts/capture_screenshots.py` (delegates to personal skill **`ha-integration-screenshots`** at `~/.cursor/skills/`). Never commit tokens.
+
+## Documentation
+
+- **[`README.md`](README.md)** — user-facing install, configure, API mapping, screenshot gallery.
+- **[`docs/images/`](docs/images/)** — committed UI screenshots (integrations, config flow, options, devices).
+- **[`docs/screenshot-manifest.yaml`](docs/screenshot-manifest.yaml)** — Playwright capture plan (device selectors, paths, actions).
+- **Cursor skill:** `~/.cursor/skills/ha-integration-screenshots/` — reusable across all HA custom integration repos.
+
 ## Dev environment
 
 ```bash
 docker compose up -d    # http://localhost:8123
 # Integration mounted: ./custom_components/globalcache_itach → /config/custom_components/globalcache_itach
-python3 -m pytest tests/ -q   # 29 tests, no full HA required
+python3 -m pytest tests/ -q   # 32 tests, no full HA required
 ```
 
-Restart HA after changing `strings.json` / integration code if labels or behavior do not update in the UI.
+### Refresh README screenshots
+
+```bash
+export HA_REFRESH_TOKEN="<dev instance token>"
+pip install playwright requests pyyaml && python3 -m playwright install chromium
+python3 scripts/capture_screenshots.py
+# or: python3 ~/.cursor/skills/ha-integration-screenshots/scripts/capture_ha_screenshots.py --repo-root .
+python3 ~/.cursor/skills/ha-integration-screenshots/scripts/capture_ha_screenshots.py --repo-root . --discover-devices
+```
 
 ## If UI still returns 500
 
 Check **Settings → System → Logs**. Typical causes: missing translation key, selector schema mismatch, exception in `config_flow.py` / `async_setup_entry`.
+
+Restart HA after changing `strings.json` / integration code if labels or behavior do not update in the UI.
 
 ## Optional follow-ups (not implemented)
 
@@ -100,4 +119,4 @@ Check **Settings → System → Logs**. Typical causes: missing translation key,
 
 ---
 
-*Last updated: serial RX monitoring, `monitor_incoming` option, entity registry cleanup, GC-100 IR/relay handling, reconfigure — manifest 1.0.0.*
+*Last updated: README + docs/images screenshots, docs/screenshot-manifest.yaml, ha-integration-screenshots Cursor skill, button-only IR (no `remote` platform) — manifest 1.0.0.*

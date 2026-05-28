@@ -1,0 +1,30 @@
+domain: globalcache_itach
+ha_url: http://localhost:8123
+output_dir: docs/images
+integration_type: hub
+viewport:
+  width: 1280
+  height: 900
+
+screenshots:
+  - name: integrations.png
+    path: /config/integrations
+    wait_ms: 2000
+
+  - name: integration-detail.png
+    path: /config/integrations/integration/{domain}
+
+  - name: options-menu.png
+    action: options_menu
+
+  - name: config-flow.png
+    action: config_flow
+
+  - name: gateway-device.png
+    device: gateway
+
+  - name: remote-device.png
+    device: by_model:IR remote
+
+  - name: gc100-gateway.png
+    device: by_name:GC100
