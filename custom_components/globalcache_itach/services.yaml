@@ -320,3 +320,173 @@ get_led_lighting:
           min: 1
           max: 6
           mode: box
+
+send_serial:
+  name: Send serial payload
+  description: >-
+    Optionally apply set_SERIAL settings, then send ASCII on the serial data port
+    (control TCP port + module).
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+    payload:
+      required: true
+      selector:
+        text:
+    settings:
+      selector:
+        text:
+    append_cr:
+      default: true
+      selector:
+        boolean:
+
+get_serial:
+  name: Get serial parameters
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+
+set_serial:
+  name: Set serial parameters
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+    settings:
+      required: true
+      example: "9600,FLOW_NONE,PARITY_NONE"
+      selector:
+        text:
+
+set_relay:
+  name: Set relay state
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+    "on":
+      name: Relay on
+      required: true
+      selector:
+        boolean:
+
+get_relay:
+  name: Get relay state
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+
+pulse_relay:
+  name: Pulse relay
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: globalcache_itach
+    module:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    port:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+    pulse_seconds:
+      default: 1
+      selector:
+        number:
+          min: 0.05
+          max: 60
+          step: 0.05
+          unit_of_measurement: s

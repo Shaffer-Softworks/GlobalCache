@@ -12,8 +12,23 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_REMOTES, DOMAIN, MANUFACTURER
+from .const import (
+    CONF_CONN_PORT,
+    CONF_MODULE,
+    CONF_REMOTES,
+    CONF_SERIAL_ID,
+    serial_listen_enabled,
+    CONF_SERIAL_NAME,
+    CONF_SERIAL_PORTS,
+    DOMAIN,
+    MANUFACTURER,
+)
 from .coordinator import ItachCoordinator
+from .entity_registry_util import (
+    active_serial_rx_unique_ids,
+    async_remove_stale_entities,
+    serial_rx_unique_id,
+)
 
 
 async def async_setup_entry(
@@ -22,13 +37,24 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: ItachCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        [
-            ItachGatewayDiagnosticSensor(coordinator, entry),
-            ItachLastPollSensor(coordinator, entry),
-            ItachRemoteCountSensor(coordinator, entry),
-        ]
+    async_remove_stale_entities(
+        hass, entry, "sensor", active_serial_rx_unique_ids(entry)
     )
+    entities: list[SensorEntity] = [
+        ItachGatewayDiagnosticSensor(coordinator, entry),
+        ItachLastPollSensor(coordinator, entry),
+        ItachRemoteCountSensor(coordinator, entry),
+    ]
+    for spec in entry.options.get(CONF_SERIAL_PORTS, []):
+        if not serial_listen_enabled(spec):
+            continue
+        serial_id = str(spec.get(CONF_SERIAL_ID, "")).strip()
+        if not serial_id:
+            continue
+        entities.append(
+            ItachSerialLastRxSensor(coordinator, entry, spec, serial_id)
+        )
+    async_add_entities(entities)
 
 
 class ItachGatewayDiagnosticSensor(
@@ -128,3 +154,51 @@ class ItachRemoteCountSensor(CoordinatorEntity[ItachCoordinator], SensorEntity):
     @property
     def native_value(self) -> int:
         return len(self._entry.options.get(CONF_REMOTES, []))
+
+
+class ItachSerialLastRxSensor(CoordinatorEntity[ItachCoordinator], SensorEntity):
+    """Last unsolicited (or response) ASCII received on a serial listener port."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "serial_last_received"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: ItachCoordinator,
+        entry: ConfigEntry,
+        spec: dict[str, Any],
+        serial_id: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._spec = spec
+        self._serial_id = serial_id
+        self._attr_unique_id = serial_rx_unique_id(entry.entry_id, serial_id)
+        self._attr_name = str(spec.get(CONF_SERIAL_NAME, "Serial"))
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry.entry_id)},
+            "name": entry.title,
+            "manufacturer": MANUFACTURER,
+            "model": entry.data.get("model") or "iTach",
+            "sw_version": entry.data.get("firmware") or "",
+        }
+
+    @property
+    def native_value(self) -> str | None:
+        value = self.coordinator.get_serial_last_rx(self._serial_id)
+        return value if value else None
+
+    @property
+    def available(self) -> bool:
+        session = self.coordinator.get_serial_session(self._serial_id)
+        return session is not None and session.is_connected
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        session = self.coordinator.get_serial_session(self._serial_id)
+        return {
+            "module": int(self._spec[CONF_MODULE]),
+            "port": int(self._spec[CONF_CONN_PORT]),
+            "data_tcp_port": self.coordinator.port + int(self._spec[CONF_MODULE]),
+            "listener_connected": session.is_connected if session else False,
+        }
