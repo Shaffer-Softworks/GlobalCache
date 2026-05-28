@@ -6,9 +6,10 @@ import copy
 import json
 import logging
 import uuid
-from typing import Any
+from typing import Any, Self
 
 import voluptuous as vol
+from homeassistant.components.dhcp import DhcpServiceInfo
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
@@ -21,6 +22,11 @@ from .device_util import (
     infer_product_label,
     ir_connectors_hint,
     parse_getdevices_lines,
+)
+from .discovery import (
+    BeaconInfo,
+    async_scan_beacons,
+    normalize_unique_id,
 )
 from .const import (
     _LEGACY_SERIAL_LISTEN,
@@ -134,15 +140,207 @@ async def _validate_connection(hass: HomeAssistant, data: dict[str, Any]) -> dic
     }
 
 
+def _host_port_taken(hass: HomeAssistant, host: str, port: int) -> bool:
+    """Return True if another config entry already uses this host and port."""
+    host_key = host.strip().lower()
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if (
+            entry.data.get(CONF_HOST, "").strip().lower() == host_key
+            and int(entry.data.get(CONF_PORT, DEFAULT_PORT)) == port
+        ):
+            return True
+    return False
+
+
 class GlobalCacheItachConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle first-time UI setup."""
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        """Initialize discovery flow state."""
+        self._discovery_host: str | None = None
+        self._discovery_port: int = DEFAULT_PORT
+        self._discovery_unique_id: str | None = None
+        self._discovery_model_hint: str = ""
+        self._discovery_probe: dict[str, Any] | None = None
+        self._discovered_beacons: list[BeaconInfo] = []
+
+    def is_matching(self, other_flow: Self) -> bool:
+        """Dedupe concurrent discovery flows for the same gateway."""
+        return (
+            self._discovery_unique_id is not None
+            and self._discovery_unique_id == other_flow._discovery_unique_id
+        )
+
+    async def _async_prepare_discovery(
+        self,
+        host: str,
+        unique_id: str,
+        *,
+        port: int = DEFAULT_PORT,
+        model_hint: str = "",
+    ) -> FlowResult:
+        """Validate a discovered gateway and show the confirm step."""
+        self._discovery_host = host.strip()
+        self._discovery_port = port
+        self._discovery_unique_id = unique_id
+        self._discovery_model_hint = model_hint
+        self._discovery_probe = None
+
+        await self.async_set_unique_id(unique_id)
+
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.unique_id == unique_id:
+                if entry.data.get(CONF_HOST) != self._discovery_host:
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        data={**entry.data, CONF_HOST: self._discovery_host},
+                    )
+                return self.async_abort(reason="already_configured")
+
+        if self.hass.config_entries.flow.async_has_matching_flow(self):
+            return self.async_abort(reason="already_in_progress")
+
+        if _host_port_taken(self.hass, self._discovery_host, port):
+            return self.async_abort(reason="already_configured")
+
+        probe_data = {
+            CONF_HOST: self._discovery_host,
+            CONF_PORT: port,
+            CONF_CONNECT_TIMEOUT: DEFAULT_CONNECT_TIMEOUT,
+        }
+        try:
+            info = await _validate_connection(self.hass, probe_data)
+        except vol.Invalid:
+            return self.async_abort(reason="cannot_connect")
+
+        self._discovery_probe = info
+        return await self.async_step_confirm()
+
+    async def async_step_discovery(
+        self, discovery_info: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle a device discovered via UDP multicast beacon."""
+        if not discovery_info:
+            return self.async_abort(reason="cannot_connect")
+        beacon = BeaconInfo.from_dict(discovery_info)
+        return await self._async_prepare_discovery(
+            beacon.host,
+            beacon.unique_id,
+            model_hint=beacon.model,
+        )
+
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
+        """Handle a device discovered via DHCP."""
+        unique_id = normalize_unique_id(discovery_info.macaddress)
+        hostname = discovery_info.hostname or ""
+        model_hint = hostname.replace("GlobalCache_", "").replace("globalcache_", "")
+        if model_hint == hostname:
+            model_hint = ""
+        return await self._async_prepare_discovery(
+            discovery_info.ip,
+            unique_id,
+            model_hint=model_hint,
+        )
+
+    async def async_step_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Confirm setup of a discovered gateway."""
+        if self._discovery_host is None or self._discovery_probe is None:
+            return self.async_abort(reason="cannot_connect")
+
+        if user_input is not None:
+            title = (
+                user_input.get(CONF_DEVICE_NAME)
+                or self._discovery_model_hint
+                or f"iTach {self._discovery_host}"
+            )
+            opts = _default_options()
+            return self.async_create_entry(
+                title=str(title),
+                data={
+                    CONF_HOST: self._discovery_host,
+                    CONF_PORT: self._discovery_port,
+                    "model": self._discovery_probe.get(
+                        "model", self._discovery_model_hint
+                    ),
+                    "firmware": self._discovery_probe.get("firmware", ""),
+                    CONF_DEVICE_MODULES: self._discovery_probe.get(
+                        CONF_DEVICE_MODULES, []
+                    ),
+                },
+                options=opts,
+            )
+
+        default_name = self._discovery_model_hint or f"iTach {self._discovery_host}"
+        return self.async_show_form(
+            step_id="confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_DEVICE_NAME, default=default_name): str,
+                }
+            ),
+            description_placeholders={
+                "host": self._discovery_host,
+                "model": self._discovery_probe.get(
+                    "model", self._discovery_model_hint
+                )
+                or "iTach",
+                "uuid": self._discovery_unique_id or "",
+            },
+        )
+
+    async def async_step_pick_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Pick a gateway found during an active network scan."""
+        if user_input is not None:
+            if user_input["device"] == "__manual__":
+                return await self.async_step_user({"__manual__": True})
+            beacon = next(
+                (
+                    b
+                    for b in self._discovered_beacons
+                    if b.unique_id == user_input["device"]
+                ),
+                None,
+            )
+            if beacon is None:
+                return self.async_abort(reason="cannot_connect")
+            return await self._async_prepare_discovery(
+                beacon.host,
+                beacon.unique_id,
+                model_hint=beacon.model,
+            )
+
+        if not self._discovered_beacons:
+            return await self.async_step_user()
+
+        choice_map = {
+            beacon.unique_id: f"{beacon.model or 'iTach'} ({beacon.host})"
+            for beacon in self._discovered_beacons
+        }
+        choice_map["__manual__"] = "Enter address manually"
+        return self.async_show_form(
+            step_id="pick_device",
+            data_schema=vol.Schema({vol.Required("device"): vol.In(choice_map)}),
+        )
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         errors: dict[str, str] = {}
+        if user_input is None:
+            self._discovered_beacons = await async_scan_beacons(
+                self.hass, timeout=5.0
+            )
+            if self._discovered_beacons:
+                return await self.async_step_pick_device()
+        elif user_input.get("__manual__"):
+            user_input = None
+
         if user_input is not None:
             try:
                 info = await _validate_connection(self.hass, user_input)
@@ -151,6 +349,8 @@ class GlobalCacheItachConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 host = user_input[CONF_HOST].strip().lower()
                 port = int(user_input[CONF_PORT])
+                if _host_port_taken(self.hass, user_input[CONF_HOST], port):
+                    return self.async_abort(reason="already_configured")
                 await self.async_set_unique_id(f"{host}_{port}")
                 self._abort_if_unique_id_configured(updates=user_input)
                 title = (

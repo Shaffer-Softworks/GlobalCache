@@ -56,6 +56,13 @@ To use **mDNS / discovery** for devices on your LAN from the container, you may 
 
 ### First-time setup
 
+Gateways are discovered automatically when they are visible on your LAN:
+
+- **UDP multicast beacons** (Global Caché native protocol on `239.255.250.250:9131`) appear under **Settings → Devices & services → Discovered integrations**.
+- **DHCP** hostname `GlobalCache_[MAC]` is used as a fallback when multicast is blocked (common in Docker bridge mode).
+
+When you add the integration manually, it also scans the network for about five seconds and offers any gateways found before asking for an address.
+
 - **Host**: IP, hostname, or mDNS name.
 - **TCP port**: default **4998**.
 - **Friendly name** (optional).
