@@ -10,13 +10,23 @@
           "device_name": "Name (optional)",
           "connect_timeout": "Connection timeout (seconds)"
         }
+      },
+      "reconfigure": {
+        "title": "Update connection",
+        "description": "Change the gateway IP or hostname. The integration will reconnect and refresh device capabilities.",
+        "data": {
+          "host": "Host or mDNS name",
+          "port": "TCP port",
+          "device_name": "Name",
+          "connect_timeout": "Connection timeout (seconds)"
+        }
       }
     },
     "error": {
       "cannot_connect": "Could not connect or query the device. Check the address, port, and network."
     },
     "abort": {
-      "already_configured": "This iTach is already configured."
+      "already_configured": "Another entry already uses this host and port."
     }
   },
   "entity": {
@@ -34,6 +44,9 @@
       },
       "configured_remotes": {
         "name": "Configured remotes"
+      },
+      "serial_last_received": {
+        "name": "Last received"
       }
     }
   },
@@ -41,7 +54,7 @@
     "step": {
       "init": {
         "title": "iTach options",
-        "description": "Adjust IR defaults, timeouts, or manage remotes.",
+        "description": "Adjust IR defaults, timeouts, remotes, relays, or serial ports.",
         "data": {
           "next": "Action"
         }
@@ -71,6 +84,7 @@
       },
       "remote_connector": {
         "title": "IR connector",
+        "description": "{ir_hint}",
         "data": {
           "module": "Module address",
           "port": "Port (1–3 on IP2IR)",
@@ -95,6 +109,73 @@
         "title": "Remove remote",
         "data": {
           "remote_id": "Remote"
+        }
+      },
+      "relay_name": {
+        "title": "Relay name",
+        "data": {
+          "name": "Name"
+        }
+      },
+      "relay_connector": {
+        "title": "Relay connector",
+        "data": {
+          "module": "Module",
+          "port": "Port"
+        }
+      },
+      "edit_relay": {
+        "title": "Edit relay",
+        "description": "Change name or module/port for a configured relay.",
+        "data": {
+          "relay_id": "Relay"
+        }
+      },
+      "remove_relay": {
+        "title": "Remove relay",
+        "data": {
+          "relay_id": "Relay"
+        }
+      },
+      "serial_name": {
+        "title": "Serial port name",
+        "data": {
+          "name": "Name"
+        }
+      },
+      "serial_connector": {
+        "title": "Serial connector",
+        "data": {
+          "module": "Module",
+          "port": "Port"
+        }
+      },
+      "serial_settings": {
+        "title": "Serial line settings",
+        "data": {
+          "serial_settings": "Parameters (get_SERIAL / set_SERIAL)",
+          "append_cr": "Append CR to each send",
+          "monitor_incoming": "Monitor incoming data (persistent connection)"
+        }
+      },
+      "serial_commands": {
+        "title": "Serial presets",
+        "description": "{hint}",
+        "data": {
+          "commands_json": "JSON array"
+        }
+      },
+      "edit_serial": {
+        "title": "Edit serial port",
+        "description": "Change name, connector, line settings, or preset buttons.",
+        "data": {
+          "serial_id": "Serial port"
+        }
+      },
+      "remove_serial": {
+        "title": "Remove serial port",
+        "data": {
+          "serial_id": "Serial port"
         }
       }
     }

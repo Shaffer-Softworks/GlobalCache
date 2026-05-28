@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -17,7 +18,11 @@ from .const import (
     ATTR_MODE,
     ATTR_MODULE,
     ATTR_OFFSET,
+    ATTR_ON,
+    ATTR_PAYLOAD,
     ATTR_PORT,
+    ATTR_PULSE_SECONDS,
+    ATTR_SETTINGS,
     ATTR_PULSE_PAIRS,
     ATTR_RAMP,
     ATTR_REPEAT,
@@ -33,7 +38,10 @@ from .const import (
     SERVICE_GET_IR,
     SERVICE_GET_LED_LIGHTING,
     SERVICE_GET_NET,
+    SERVICE_GET_RELAY,
+    SERVICE_GET_SERIAL,
     SERVICE_GET_VERSION,
+    SERVICE_PULSE_RELAY,
     SERVICE_IR_LEARNER_START,
     SERVICE_IR_LEARNER_STOP,
     SERVICE_RECEIVE_IR,
@@ -42,6 +50,9 @@ from .const import (
     SERVICE_SENDIR,
     SERVICE_SET_IR,
     SERVICE_SET_LED_LIGHTING,
+    SERVICE_SET_RELAY,
+    SERVICE_SET_SERIAL,
+    SERVICE_SEND_SERIAL,
     SERVICE_STOP_IR,
 )
 
@@ -53,7 +64,13 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[str] = ["binary_sensor", "remote", "sensor"]
+PLATFORMS: list[str] = [
+    "binary_sensor",
+    "button",
+    "sensor",
+    "switch",
+    "text",
+]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -61,10 +78,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from homeassistant.helpers import device_registry as dr
 
     from .coordinator import ItachCoordinator
+    from .device_util import async_register_remote_devices
+    from .entity_registry_util import async_cleanup_stale_entities
+
+    # Drop removed remotes/serial/relay entities before TCP setup (refresh can fail).
+    async_cleanup_stale_entities(hass, entry)
 
     hass.data.setdefault(DOMAIN, {})
     coordinator = ItachCoordinator(hass, entry, dict(entry.data), dict(entry.options))
     await coordinator.async_config_entry_first_refresh()
+    await coordinator.async_start_serial_listeners()
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     device_registry = dr.async_get(hass)
@@ -76,6 +99,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         model=entry.data.get("model") or "iTach",
         sw_version=entry.data.get("firmware") or "",
     )
+    async_register_remote_devices(hass, entry)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -85,12 +109,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload integration when options change."""
+    from .entity_registry_util import async_cleanup_stale_entities
+
+    async_cleanup_stale_entities(hass, entry)
     await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from .coordinator import ItachCoordinator
+    from .entity_registry_util import async_cleanup_stale_entities
 
+    async_cleanup_stale_entities(hass, entry)
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         coordinator: ItachCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
@@ -198,6 +227,12 @@ def _unregister_services(hass: HomeAssistant) -> None:
         SERVICE_GET_NET,
         SERVICE_SET_LED_LIGHTING,
         SERVICE_GET_LED_LIGHTING,
+        SERVICE_SEND_SERIAL,
+        SERVICE_GET_SERIAL,
+        SERVICE_SET_SERIAL,
+        SERVICE_SET_RELAY,
+        SERVICE_GET_RELAY,
+        SERVICE_PULSE_RELAY,
     ):
         if hass.services.has_service(DOMAIN, name):
             hass.services.async_remove(DOMAIN, name)
@@ -359,6 +394,59 @@ def _register_services(hass: HomeAssistant) -> None:
             timeout=10.0,
         )
         return {"lines": lines}
+
+    async def _send_serial(call: ServiceCall) -> dict[str, Any]:
+        coord = _coordinator_for_service(hass, call)
+        mod = int(call.data[ATTR_MODULE])
+        port = int(call.data[ATTR_PORT])
+        payload = str(call.data[ATTR_PAYLOAD])
+        append_cr = bool(call.data.get("append_cr", True))
+        settings = str(call.data.get(ATTR_SETTINGS, "")).strip()
+        if settings:
+            await coord.client.set_serial_settings(mod, port, settings)
+        response = await coord.client.send_serial_payload(
+            mod, payload, append_cr=append_cr
+        )
+        return {"response": response}
+
+    async def _get_serial(call: ServiceCall) -> dict[str, Any]:
+        coord = _coordinator_for_service(hass, call)
+        mod = int(call.data[ATTR_MODULE])
+        port = int(call.data[ATTR_PORT])
+        line = await coord.client.get_serial_settings(mod, port)
+        return {"line": line}
+
+    async def _set_serial(call: ServiceCall) -> dict[str, Any]:
+        coord = _coordinator_for_service(hass, call)
+        mod = int(call.data[ATTR_MODULE])
+        port = int(call.data[ATTR_PORT])
+        line = await coord.client.set_serial_settings(
+            mod, port, str(call.data[ATTR_SETTINGS])
+        )
+        return {"line": line}
+
+    async def _set_relay(call: ServiceCall) -> None:
+        coord = _coordinator_for_service(hass, call)
+        mod = int(call.data[ATTR_MODULE])
+        port = int(call.data[ATTR_PORT])
+        on = bool(call.data[ATTR_ON])
+        await coord.client.set_relay_state(mod, port, on)
+
+    async def _get_relay(call: ServiceCall) -> dict[str, Any]:
+        coord = _coordinator_for_service(hass, call)
+        mod = int(call.data[ATTR_MODULE])
+        port = int(call.data[ATTR_PORT])
+        state = await coord.client.get_relay_state(mod, port)
+        return {"on": state}
+
+    async def _pulse_relay(call: ServiceCall) -> None:
+        coord = _coordinator_for_service(hass, call)
+        mod = int(call.data[ATTR_MODULE])
+        port = int(call.data[ATTR_PORT])
+        seconds = float(call.data.get(ATTR_PULSE_SECONDS, 1.0))
+        await coord.client.set_relay_state(mod, port, True)
+        await asyncio.sleep(max(0.05, min(seconds, 60.0)))
+        await coord.client.set_relay_state(mod, port, False)
 
     hass.services.async_register(
         DOMAIN,
@@ -526,4 +614,86 @@ def _register_services(hass: HomeAssistant) -> None:
             }
         ),
         supports_response=True,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SEND_SERIAL,
+        _send_serial,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_DEVICE_ID): cv.string,
+                vol.Required(ATTR_MODULE): vol.Coerce(int),
+                vol.Required(ATTR_PORT): vol.Coerce(int),
+                vol.Required(ATTR_PAYLOAD): cv.string,
+                vol.Optional(ATTR_SETTINGS): cv.string,
+                vol.Optional("append_cr", default=True): cv.boolean,
+            }
+        ),
+        supports_response=True,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_SERIAL,
+        _get_serial,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_DEVICE_ID): cv.string,
+                vol.Required(ATTR_MODULE): vol.Coerce(int),
+                vol.Required(ATTR_PORT): vol.Coerce(int),
+            }
+        ),
+        supports_response=True,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_SERIAL,
+        _set_serial,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_DEVICE_ID): cv.string,
+                vol.Required(ATTR_MODULE): vol.Coerce(int),
+                vol.Required(ATTR_PORT): vol.Coerce(int),
+                vol.Required(ATTR_SETTINGS): cv.string,
+            }
+        ),
+        supports_response=True,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_RELAY,
+        _set_relay,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_DEVICE_ID): cv.string,
+                vol.Required(ATTR_MODULE): vol.Coerce(int),
+                vol.Required(ATTR_PORT): vol.Coerce(int),
+                vol.Required(ATTR_ON): cv.boolean,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_RELAY,
+        _get_relay,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_DEVICE_ID): cv.string,
+                vol.Required(ATTR_MODULE): vol.Coerce(int),
+                vol.Required(ATTR_PORT): vol.Coerce(int),
+            }
+        ),
+        supports_response=True,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_PULSE_RELAY,
+        _pulse_relay,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_DEVICE_ID): cv.string,
+                vol.Required(ATTR_MODULE): vol.Coerce(int),
+                vol.Required(ATTR_PORT): vol.Coerce(int),
+                vol.Optional(ATTR_PULSE_SECONDS, default=1.0): vol.Coerce(float),
+            }
+        ),
     )
