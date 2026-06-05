@@ -1,7 +1,9 @@
 {
   "domain": "globalcache_itach",
   "name": "Global Caché iTach",
-  "codeowners": ["@Shaffer-Softworks"],
+  "codeowners": [
+    "@Shaffer-Softworks"
+  ],
   "config_flow": true,
   "dhcp": [
     {
