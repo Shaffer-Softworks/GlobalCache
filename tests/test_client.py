@@ -52,6 +52,42 @@ async def fake_server() -> tuple[str, int]:
     await server.wait_closed()
 
 
+@pytest.fixture
+async def stale_ir_server() -> tuple[str, int, list[str]]:
+    connections: list[str] = []
+
+    async def handler(
+        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        connections.append("connected")
+        connection_number = len(connections)
+        try:
+            while True:
+                raw = await reader.readuntil(b"\r")
+                cmd = raw.decode("ascii", errors="replace").strip().lower()
+                if connection_number == 1 and cmd.startswith("sendir,1:1,8,"):
+                    continue
+                if connection_number == 1 and cmd == "getversion,0":
+                    continue
+                if cmd == "getversion,0":
+                    writer.write(b"version,0,RECOVERED\r")
+                else:
+                    writer.write(b"completeir,1:1,8\r")
+                await writer.drain()
+        except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
+            pass
+        finally:
+            writer.close()
+
+    server = await asyncio.start_server(handler, "127.0.0.1", 0)
+    sockets = server.sockets
+    assert sockets
+    port = sockets[0].getsockname()[1]
+    yield "127.0.0.1", port, connections
+    server.close()
+    await server.wait_closed()
+
+
 @pytest.mark.asyncio
 async def test_getdevices(fake_server: tuple[str, int]) -> None:
     host, port = fake_server
@@ -104,3 +140,25 @@ async def test_unknowncommand_raises(fake_server: tuple[str, int]) -> None:
 def test_is_connected_false_before_connect() -> None:
     client = ItachClient("127.0.0.1", 4998)
     assert client.is_connected is False
+
+
+@pytest.mark.asyncio
+async def test_sendir_timeout_resets_connection(
+    stale_ir_server: tuple[str, int, list[str]],
+) -> None:
+    host, port, connections = stale_ir_server
+    client = ItachClient(host, port, connect_timeout=2.0, command_timeout=0.05)
+    try:
+        with pytest.raises(ItachError, match="sendir timeout"):
+            await client.send_sendir(1, 1, 8, 38000, 1, 1, [10, 20])
+        assert client.is_connected is False
+
+        lines = await client.send_raw(
+            "getversion,0",
+            end_on=lambda line: line.strip().lower().startswith("version,"),
+            timeout=1.0,
+        )
+        assert lines == ["version,0,RECOVERED"]
+        assert len(connections) >= 2
+    finally:
+        await client.disconnect()
