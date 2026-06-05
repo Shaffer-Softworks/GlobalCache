@@ -69,7 +69,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN != '' && secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
 
-      - name: Bump manifest, push release branch, publish release, open PR
+      - name: Bump manifest, push release branch, publish release
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN != '' && secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
           HAS_WORKFLOW_PAT: ${{ secrets.WORKFLOW_TRIGGER_TOKEN != '' }}
@@ -85,7 +85,13 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$BRANCH"
+
+          git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" 2>/dev/null || true
+          if git rev-parse "refs/remotes/origin/${BRANCH}" >/dev/null 2>&1; then
+            git checkout -B "$BRANCH" "refs/remotes/origin/${BRANCH}"
+          else
+            git checkout -b "$BRANCH"
+          fi
 
           export MANIFEST_VERSION="$VERSION"
           python3 << 'PY'
@@ -103,12 +109,11 @@ jobs:
 
           git add custom_components/globalcache_itach/manifest.json
           if git diff --staged --quiet; then
-            echo "::error::Manifest already at ${VERSION}; nothing to commit."
-            exit 1
+            echo "::notice::Manifest already at ${VERSION}; reusing existing release branch."
+          else
+            git commit -m "chore: bump manifest to ${VERSION} for ${TAG}"
           fi
-          git commit -m "chore: bump manifest to ${VERSION} for ${TAG}"
 
-          git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" 2>/dev/null || true
           if git rev-parse "refs/remotes/origin/${BRANCH}" >/dev/null 2>&1; then
             git push -u origin "$BRANCH" --force-with-lease="refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
           else
@@ -129,7 +134,9 @@ jobs:
           if [ "$INPUT_DRAFT" = "true" ]; then EXTRA+=(--draft); fi
           if [ "$INPUT_PRERELEASE" = "true" ]; then EXTRA+=(--prerelease); fi
 
-          if [ -n "$RELEASE_NOTES" ]; then
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release ${TAG} already exists; skipping release creation."
+          elif [ -n "$RELEASE_NOTES" ]; then
             printf '%s\n' "$RELEASE_NOTES" > /tmp/release-notes.md
             gh release create "$TAG" --target "$BRANCH" --title "$TAG" -F /tmp/release-notes.md "${EXTRA[@]}"
           else
@@ -137,11 +144,17 @@ jobs:
           fi
 
           if [ "$(gh pr list --head "$BRANCH" --state open --json number -q 'length')" -eq 0 ]; then
-            gh pr create \
-              --base "$DEFAULT_BRANCH" \
-              --head "$BRANCH" \
-              --title "Merge ${TAG} manifest bump" \
-              --body "Automated manifest bump for [${TAG}](https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}). Merge after checks pass."
+            if [ "${HAS_WORKFLOW_PAT}" = "true" ]; then
+              gh pr create \
+                --base "$DEFAULT_BRANCH" \
+                --head "$BRANCH" \
+                --title "Merge ${TAG} manifest bump" \
+                --body "Automated manifest bump for [${TAG}](https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}). Merge after checks pass."
+            else
+              PR_URL="https://github.com/${GITHUB_REPOSITORY}/compare/${DEFAULT_BRANCH}...${BRANCH}?expand=1"
+              echo "::notice::GitHub Actions cannot create pull requests in this repository without WORKFLOW_TRIGGER_TOKEN. Open the manifest bump PR manually: ${PR_URL}"
+              echo "Open the manifest bump PR manually: ${PR_URL}" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
 
           if [ "${HAS_WORKFLOW_PAT}" != "true" ]; then
