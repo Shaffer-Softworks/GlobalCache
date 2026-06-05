@@ -413,39 +413,49 @@ class ItachClient:
         loop = asyncio.get_event_loop()
         deadline = loop.time() + self._command_timeout
         max_resends = 25
+        reset_connection = False
 
-        async with self._write_lock:
-            for _ in range(max_resends):
-                if loop.time() > deadline:
-                    break
-                self._writer.write(wire)
-                await self._writer.drain()
-                while True:
-                    remaining = deadline - loop.time()
-                    if remaining <= 0:
-                        msg = "sendir timeout waiting for completeir"
-                        raise ItachError(msg)
-                    try:
-                        line = await asyncio.wait_for(
-                            self._line_queue.get(), timeout=min(remaining, 1.0)
-                        )
-                    except TimeoutError:
-                        continue
-                    collected.append(line)
-                    stripped = line.strip()
-                    if UNKNOWN_RE.match(stripped):
-                        msg = f"sendir failed: {format_unknown_command(line)}"
-                        raise ItachError(msg)
-                    if ERR_RE.match(stripped):
-                        msg = f"sendir failed: {stripped}"
-                        raise ItachError(msg)
-                    if BUSYIR_RE.match(line.strip()):
-                        await asyncio.sleep(0.05)
+        try:
+            async with self._write_lock:
+                for _ in range(max_resends):
+                    if loop.time() > deadline:
                         break
-                    if complete_match(line):
-                        return collected
-        msg = "sendir aborted: timeout or too many busyIR retries"
-        raise ItachError(msg)
+                    self._writer.write(wire)
+                    await self._writer.drain()
+                    while True:
+                        remaining = deadline - loop.time()
+                        if remaining <= 0:
+                            reset_connection = True
+                            msg = "sendir timeout waiting for completeir"
+                            raise ItachError(msg)
+                        try:
+                            line = await asyncio.wait_for(
+                                self._line_queue.get(), timeout=min(remaining, 1.0)
+                            )
+                        except TimeoutError:
+                            continue
+                        collected.append(line)
+                        stripped = line.strip()
+                        if UNKNOWN_RE.match(stripped):
+                            msg = f"sendir failed: {format_unknown_command(line)}"
+                            raise ItachError(msg)
+                        if ERR_RE.match(stripped):
+                            msg = f"sendir failed: {stripped}"
+                            raise ItachError(msg)
+                        if BUSYIR_RE.match(line.strip()):
+                            await asyncio.sleep(0.05)
+                            break
+                        if complete_match(line):
+                            return collected
+            reset_connection = True
+            msg = "sendir aborted: timeout or too many busyIR retries"
+            raise ItachError(msg)
+        except OSError:
+            reset_connection = True
+            raise
+        finally:
+            if reset_connection:
+                await self.disconnect()
 
     async def send_sendir(
         self,
