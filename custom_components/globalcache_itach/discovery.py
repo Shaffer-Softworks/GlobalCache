@@ -157,7 +157,7 @@ class DiscoveryManager:
             _LOGGER.debug("Global Caché UDP discovery unavailable: %s", err)
             return
         self._sock = sock
-        self._listen_task = self._hass.async_create_task(
+        self._listen_task = self._hass.async_create_background_task(
             self._listen_loop(), name="globalcache_itach_discovery"
         )
 
