@@ -8,8 +8,8 @@ Custom integration for **Global Caché iTach / GC-100** gateways over TCP (defau
 
 - **Domain:** `globalcache_itach`
 - **Minimum HA:** see [`hacs.json`](hacs.json) (currently 2024.1)
-- **Manifest:** [`manifest.json`](custom_components/globalcache_itach/manifest.json) — `integration_type: hub`, version **1.0.0**
-- **Repo layout:** [`custom_components/globalcache_itach/`](custom_components/globalcache_itach/), [`tests/`](tests/) (32 tests), [`docs/images/`](docs/images/) (README screenshots), [`docker-compose.yml`](docker-compose.yml), [`README.md`](README.md)
+- **Manifest:** [`manifest.json`](custom_components/globalcache_itach/manifest.json) — `integration_type: hub`, version **1.0.2** (on `main`; latest GitHub release is still **v1.0.1** until v1.0.2 is cut)
+- **Repo layout:** [`custom_components/globalcache_itach/`](custom_components/globalcache_itach/), [`tests/`](tests/) (41 tests), [`docs/images/`](docs/images/) (README screenshots), [`docker-compose.yml`](docker-compose.yml), [`README.md`](README.md)
 
 ## Platforms
 
@@ -26,7 +26,8 @@ Custom integration for **Global Caché iTach / GC-100** gateways over TCP (defau
 | Persistent serial data-port RX | [`serial_session.py`](custom_components/globalcache_itach/serial_session.py) |
 | `getdevices` parsing, IR module checks | [`device_util.py`](custom_components/globalcache_itach/device_util.py) |
 | Stale entity cleanup (options-driven) | [`entity_registry_util.py`](custom_components/globalcache_itach/entity_registry_util.py) |
-| `remote` / `switch` / `text` / `button` / `sensor` / `binary_sensor` | respective `*.py` |
+| UDP multicast + DHCP discovery | [`discovery.py`](custom_components/globalcache_itach/discovery.py) |
+| `switch` / `text` / `button` / `sensor` / `binary_sensor` | respective `*.py` |
 | Pronto / GC pair conversion | [`pronto.py`](custom_components/globalcache_itach/pronto.py) |
 | Services schema | [`services.yaml`](custom_components/globalcache_itach/services.yaml) |
 | UI strings | [`strings.json`](custom_components/globalcache_itach/strings.json), [`translations/en.json`](custom_components/globalcache_itach/translations/en.json) |
@@ -81,6 +82,12 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 
 10. **README screenshots** — PNGs in [`docs/images/`](docs/images/), driven by [`docs/screenshot-manifest.yaml`](docs/screenshot-manifest.yaml). Regenerate with `HA_REFRESH_TOKEN=… python3 scripts/capture_screenshots.py` (delegates to personal skill **`ha-integration-screenshots`** at `~/.cursor/skills/`). Never commit tokens.
 
+11. **HA 2026.2+ `DhcpServiceInfo`** — import from `homeassistant.helpers.service_info.dhcp`, **not** `homeassistant.components.dhcp` (removed in HA Core 2026.2). Fixed on `main` in PR #6 (`fix/dhcp-service-info-import`). **v1.0.1 does not include this fix** — cut **v1.0.2** for production/HACS.
+
+12. **UDP discovery** — implemented in [`discovery.py`](custom_components/globalcache_itach/discovery.py): multicast `239.255.250.250:9131` + DHCP hostname `globalcache_*` fallback. Discovery listener runs at integration setup; bootstrap may log a timeout waiting on `globalcache_itach_discovery` in Docker bridge mode (HA continues anyway).
+
+13. **Git / releases** — semver bumps via [`.github/workflows/release.yml`](.github/workflows/release.yml) (workflow_dispatch). `WORKFLOW_TRIGGER_TOKEN` enables automated manifest-bump PRs; without it, open the compare URL from the workflow summary. **Do not** add `Co-authored-by: Cursor` to commits; history was rewritten (2026-06-05) to remove it from `main` and retag `v1.0.0`.
+
 ## Documentation
 
 - **[`README.md`](README.md)** — user-facing install, configure, API mapping, screenshot gallery.
@@ -93,7 +100,7 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 ```bash
 docker compose up -d    # http://localhost:8123
 # Integration mounted: ./custom_components/globalcache_itach → /config/custom_components/globalcache_itach
-python3 -m pytest tests/ -q   # 32 tests, no full HA required
+python3 -m pytest tests/ -q   # 41 tests, no full HA required
 ```
 
 ### Refresh README screenshots
@@ -112,11 +119,27 @@ Check **Settings → System → Logs**. Typical causes: missing translation key,
 
 Restart HA after changing `strings.json` / integration code if labels or behavior do not update in the UI.
 
+### HA 2026.2+ import error (known fixed on `main`)
+
+```
+cannot import name 'DhcpServiceInfo' from 'homeassistant.components.dhcp'
+```
+
+Config entry shows **`setup_error` / Import error**. Deploy manifest **1.0.2+** (or cherry-pick the one-line import change in `config_flow.py`), then restart HA or reload the integration.
+
+## Production / deployment snapshot (2026-06-05)
+
+| Environment | Integration version | Status |
+|-------------|---------------------|--------|
+| **Production** (`ha.shafferco.com`) | HACS **v1.0.1** | `setup_error` — needs v1.0.2 |
+| **Docker dev** (`localhost:8123`) | bind-mount **1.0.2** | Loads cleanly after DhcpServiceInfo fix |
+
+**To ship the fix:** run release workflow for **1.0.2** → update via HACS → restart HA.
+
 ## Optional follow-ups (not implemented)
 
-- UDP discovery (e.g. 239.255.250.250:9131)
 - YAML import from core `itach` integration if applicable
 
 ---
 
-*Last updated: README + docs/images screenshots, docs/screenshot-manifest.yaml, ha-integration-screenshots Cursor skill, button-only IR (no `remote` platform) — manifest 1.0.0.*
+*Last updated: 2026-06-05 — HA 2026.2 DhcpServiceInfo fix (manifest 1.0.2 on main, v1.0.2 release pending), UDP discovery, git history cleaned of Cursor co-author, 41 tests.*
