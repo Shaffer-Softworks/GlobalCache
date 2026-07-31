@@ -8,7 +8,8 @@ Custom integration for **Global Caché iTach / GC-100** gateways over TCP (defau
 
 - **Domain:** `globalcache_itach`
 - **Minimum HA:** see [`hacs.json`](hacs.json) (currently 2024.1)
-- **Manifest:** [`manifest.json`](custom_components/globalcache_itach/manifest.json) — `integration_type: hub`, version **1.0.2** (on `main`; latest GitHub release is still **v1.0.1** until v1.0.2 is cut)
+- **HACS:** listed in [hacs/default](https://github.com/hacs/default) (`Shaffer-Softworks/GlobalCache`) — [PR #8063](https://github.com/hacs/default/pull/8063) merged 2026-07-31
+- **Manifest:** [`manifest.json`](custom_components/globalcache_itach/manifest.json) — `integration_type: hub`, version **1.0.2** on `main` (latest GitHub release **v1.0.3**)
 - **Repo layout:** [`custom_components/globalcache_itach/`](custom_components/globalcache_itach/), [`tests/`](tests/) (41 tests), [`docs/images/`](docs/images/) (README screenshots), [`docker-compose.yml`](docker-compose.yml), [`README.md`](README.md)
 
 ## Platforms
@@ -127,14 +128,14 @@ cannot import name 'DhcpServiceInfo' from 'homeassistant.components.dhcp'
 
 Config entry shows **`setup_error` / Import error**. Deploy manifest **1.0.2+** (or cherry-pick the one-line import change in `config_flow.py`), then restart HA or reload the integration.
 
-## Production / deployment snapshot (2026-06-05)
+## Production / deployment snapshot (2026-07-31)
 
 | Environment | Integration version | Status |
 |-------------|---------------------|--------|
-| **Production** (`ha.shafferco.com`) | HACS **v1.0.1** | `setup_error` — needs v1.0.2 |
-| **Docker dev** (`localhost:8123`) | bind-mount **1.0.2** | Loads cleanly after DhcpServiceInfo fix |
+| **HACS default** | Search **Global Caché iTach** / **GlobalCache** | Added via [hacs/default#8063](https://github.com/hacs/default/pull/8063) |
+| **Latest release** | **v1.0.3** | https://github.com/Shaffer-Softworks/GlobalCache/releases |
 
-**To ship the fix:** run release workflow for **1.0.2** → update via HACS → restart HA.
+Install via HACS (default feed) preferred; custom-repository install is no longer needed.
 
 ## Optional follow-ups (not implemented)
 
@@ -142,4 +143,4 @@ Config entry shows **`setup_error` / Import error**. Deploy manifest **1.0.2+** 
 
 ---
 
-*Last updated: 2026-06-05 — HA 2026.2 DhcpServiceInfo fix (manifest 1.0.2 on main, v1.0.2 release pending), UDP discovery, git history cleaned of Cursor co-author, 41 tests.*
+*Last updated: 2026-07-31 — HACS default listing merged; README install path updated; latest release v1.0.3.*

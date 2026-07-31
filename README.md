@@ -1,6 +1,9 @@
 # Global Caché iTach (Home Assistant custom integration)
 
-HACS-ready integration for **Global Caché iTach** and **GC-100** TCP/IP gateways (e.g. IP2IR, IP2CC, IP2SL). It adds a **config flow** (including optional **connect timeout**), **options flow** for IR defaults, remotes, **relays**, and **serial ports**, per-command **`button`** entities (Pronto, GC pulse pairs, or full **`sendir`** lines), **`switch`** / **`text`** / **`button`** entities for relay and serial connectors, diagnostic sensors, and **services** covering the TCP API (IR, LED, relay, serial, and raw lines).
+[![Validate](https://github.com/Shaffer-Softworks/GlobalCache/actions/workflows/validate.yaml/badge.svg)](https://github.com/Shaffer-Softworks/GlobalCache/actions/workflows/validate.yaml)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
+
+Home Assistant custom integration for **Global Caché iTach** and **GC-100** TCP/IP gateways (e.g. IP2IR, IP2CC, IP2SL). It adds a **config flow** (including optional **connect timeout**), **options flow** for IR defaults, remotes, **relays**, and **serial ports**, per-command **`button`** entities (Pronto, GC pulse pairs, or full **`sendir`** lines), **`switch`** / **`text`** / **`button`** entities for relay and serial connectors, diagnostic sensors, and **services** covering the TCP API (IR, LED, relay, serial, and raw lines).
 
 Minimum Home Assistant version: **2024.1** (see [`hacs.json`](hacs.json)). The integration is declared as a **`hub`** (gateway) so Home Assistant does not offer a broken **“Add device”** device-subentry flow for a single-purpose TCP bridge.
 
@@ -24,13 +27,23 @@ There is **no `remote` platform** — each JSON command becomes its own **button
 |---|
 | [![GC-100 gateway](docs/images/gc100-gateway.png)](docs/images/gc100-gateway.png) |
 
-## Install
+## Installation
 
-1. Copy [`custom_components/globalcache_itach`](custom_components/globalcache_itach) into your Home Assistant `config/custom_components/` directory, or add this repository to **HACS** as a custom repository (type: Integration).
-2. Restart Home Assistant.
-3. Go to **Settings → Devices & services → Add integration** and search for **Global Caché iTach**.
+### Using HACS
+
+This integration is available in the [HACS default](https://github.com/hacs/default) feed. Search for **Global Caché iTach** (or **GlobalCache**) and install it directly from HACS.
+
+See the [official HACS documentation](https://hacs.xyz/docs/) for how to install and use HACS.
+
+Restart Home Assistant after installation, then go to **Settings → Devices & services → Add integration** and search for **Global Caché iTach**.
 
 ![Add integration via search](docs/images/integrations.png)
+
+### Manually (not recommended)
+
+1. Download the [latest release](https://github.com/Shaffer-Softworks/GlobalCache/releases) and copy [`custom_components/globalcache_itach`](custom_components/globalcache_itach) into your Home Assistant `config/custom_components/` directory.
+2. Restart Home Assistant.
+3. Add the integration as above.
 
 ## Run with Docker
 
