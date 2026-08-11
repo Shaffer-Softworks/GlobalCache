@@ -87,7 +87,7 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 
 12. **UDP discovery** — implemented in [`discovery.py`](custom_components/globalcache_itach/discovery.py): multicast `239.255.250.250:9131` + DHCP hostname `globalcache_*` fallback. Discovery listener runs at integration setup; bootstrap may log a timeout waiting on `globalcache_itach_discovery` in Docker bridge mode (HA continues anyway).
 
-13. **Git / releases** — semver bumps via [`.github/workflows/release.yml`](.github/workflows/release.yml) (workflow_dispatch). `WORKFLOW_TRIGGER_TOKEN` enables automated manifest-bump PRs; without it, open the compare URL from the workflow summary. **Do not** add `Co-authored-by: Cursor` to commits; history was rewritten (2026-06-05) to remove it from `main` and retag `v1.0.0`.
+13. **Git / releases** — semver bumps via [`.github/workflows/release.yml`](.github/workflows/release.yml) (workflow_dispatch). Each release attaches **`globalcache_itach.zip`** (integration files at zip root) for HACS `zip_release` download counting; [`hacs.json`](hacs.json) sets `zip_release` + `filename`. `WORKFLOW_TRIGGER_TOKEN` enables automated manifest-bump PRs; without it, open the compare URL from the workflow summary. **Do not** add `Co-authored-by: Cursor` to commits; history was rewritten (2026-06-05) to remove it from `main` and retag `v1.0.0`.
 
 ## Documentation
 

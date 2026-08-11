@@ -41,7 +41,7 @@ Restart Home Assistant after installation, then go to **Settings → Devices & s
 
 ### Manually (not recommended)
 
-1. Download the [latest release](https://github.com/Shaffer-Softworks/GlobalCache/releases) and copy [`custom_components/globalcache_itach`](custom_components/globalcache_itach) into your Home Assistant `config/custom_components/` directory.
+1. Download [`globalcache_itach.zip`](https://github.com/Shaffer-Softworks/GlobalCache/releases/latest) from the latest release and extract it into your Home Assistant `config/custom_components/globalcache_itach/` directory (the zip contains the integration files at its root).
 2. Restart Home Assistant.
 3. Add the integration as above.
 

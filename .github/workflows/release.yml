@@ -130,17 +130,27 @@ jobs:
             fi
           fi
 
+          # HACS zip_release: HACS extracts into custom_components/globalcache_itach/,
+          # so archive paths must be integration-root (manifest.json, __init__.py, …),
+          # not custom_components/globalcache_itach/… (that would double-nest).
+          ROOT="$(git rev-parse --show-toplevel)"
+          ZIP_NAME="globalcache_itach.zip"
+          rm -f "${ROOT}/${ZIP_NAME}"
+          ( cd "${ROOT}/custom_components/globalcache_itach" && zip -r "${ROOT}/${ZIP_NAME}" . \
+            -x "*__pycache__/*" -x "*.pyc" -x "*.DS_Store" )
+
           EXTRA=( )
           if [ "$INPUT_DRAFT" = "true" ]; then EXTRA+=(--draft); fi
           if [ "$INPUT_PRERELEASE" = "true" ]; then EXTRA+=(--prerelease); fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::notice::Release ${TAG} already exists; skipping release creation."
+            echo "::notice::Release ${TAG} already exists; uploading/replacing ${ZIP_NAME}."
+            gh release upload "$TAG" "${ZIP_NAME}" --clobber
           elif [ -n "$RELEASE_NOTES" ]; then
             printf '%s\n' "$RELEASE_NOTES" > /tmp/release-notes.md
-            gh release create "$TAG" --target "$BRANCH" --title "$TAG" -F /tmp/release-notes.md "${EXTRA[@]}"
+            gh release create "$TAG" "${ZIP_NAME}" --target "$BRANCH" --title "$TAG" -F /tmp/release-notes.md "${EXTRA[@]}"
           else
-            gh release create "$TAG" --target "$BRANCH" --title "$TAG" --generate-notes "${EXTRA[@]}"
+            gh release create "$TAG" "${ZIP_NAME}" --target "$BRANCH" --title "$TAG" --generate-notes "${EXTRA[@]}"
           fi
 
           if [ "$(gh pr list --head "$BRANCH" --state open --json number -q 'length')" -eq 0 ]; then
