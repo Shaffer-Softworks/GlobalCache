@@ -17,6 +17,7 @@ def test_parse_itach_beacon() -> None:
     assert info.host == "192.168.1.100"
     assert info.revision == "710-1001-05"
     assert info.status == "Ready"
+    assert info.make == "GlobalCache"
     assert info.unique_id == "GlobalCache_000C1E024239"
 
 
@@ -26,13 +27,43 @@ def test_parse_flex_beacon() -> None:
     assert info.uuid == "GlobalCache_000C1E04E5D9"
     assert info.model == "iTachFlexEthernet"
     assert info.host == "192.168.0.147"
+    assert info.make == "GlobalCache"
 
 
 def test_parse_beacon_uses_source_ip_when_config_url_missing() -> None:
-    raw = b"AMXB<-UUID=GlobalCache_000C1E024239><-Model=iTachIP2IR>"
+    raw = (
+        b"AMXB<-UUID=GlobalCache_000C1E024239>"
+        b"<-Make=GlobalCache><-Model=iTachIP2IR>"
+    )
     info = parse_beacon(raw, source_host="192.168.5.20")
     assert info is not None
     assert info.host == "192.168.5.20"
+
+
+def test_parse_beacon_accepts_case_insensitive_make() -> None:
+    raw = (
+        b"AMXB<-UUID=GlobalCache_000C1E024239>"
+        b"<-Make=globalcache><-Model=iTachIP2IR>"
+        b"<-Config-URL=http://192.168.1.50>"
+    )
+    info = parse_beacon(raw)
+    assert info is not None
+    assert info.make == "globalcache"
+    assert info.host == "192.168.1.50"
+
+
+def test_parse_beacon_rejects_non_globalcache_make() -> None:
+    raw = (
+        b"AMXB<-UUID=Denon_AVR_X2700H>"
+        b"<-Make=Denon><-Model=AVR-X2700H>"
+        b"<-Config-URL=http://192.168.0.100>"
+    )
+    assert parse_beacon(raw) is None
+
+
+def test_parse_beacon_rejects_missing_make() -> None:
+    raw = b"AMXB<-UUID=GlobalCache_000C1E024239><-Model=iTachIP2IR>"
+    assert parse_beacon(raw, source_host="192.168.5.20") is None
 
 
 def test_parse_beacon_rejects_non_amxb() -> None:
