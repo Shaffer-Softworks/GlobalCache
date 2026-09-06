@@ -114,6 +114,9 @@ def parse_beacon(data: bytes, source_host: str | None = None) -> BeaconInfo | No
         match.group(1): match.group(2).strip()
         for match in BEACON_FIELD_RE.finditer(text)
     }
+    # AMXB is a shared protocol; reject non-GlobalCache vendors (e.g. Denon/Onkyo).
+    if fields.get("Make", "").strip().lower() != "globalcache":
+        return None
     uuid = fields.get("UUID")
     if not uuid:
         return None
