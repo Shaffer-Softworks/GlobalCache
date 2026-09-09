@@ -151,6 +151,19 @@
       "serial_last_received": {
         "name": "Last received"
       }
+    },
+    "infrared": {
+      "infrared_emitter": {
+        "name": "IR emitter"
+      },
+      "infrared_receiver": {
+        "name": "IR receiver"
+      }
+    }
+  },
+  "exceptions": {
+    "send_infrared_failed": {
+      "message": "Failed to send IR on connector {connector}: {error}"
     }
   },
   "services": {

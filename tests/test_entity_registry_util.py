@@ -6,6 +6,8 @@ from custom_components.globalcache_itach.entity_registry_util import (
     active_remote_unique_ids,
     active_serial_button_unique_ids,
     active_serial_rx_unique_ids,
+    infrared_emitter_unique_id,
+    is_infrared_unique_id,
     is_options_managed_unique_id,
     remote_button_unique_id,
     serial_button_unique_id,
@@ -38,6 +40,10 @@ def test_options_managed_unique_id() -> None:
     assert not is_options_managed_unique_id(
         eid, f"{eid}_tcp_connected"
     )
+    assert not is_options_managed_unique_id(
+        eid, infrared_emitter_unique_id(eid, 1, 2)
+    )
+    assert is_infrared_unique_id(eid, infrared_emitter_unique_id(eid, 1, 2))
     assert unique_id_matches_platform(
         eid, f"{eid}_serial_abc", "text"
     )

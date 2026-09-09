@@ -7,14 +7,14 @@ This file is a **handoff snapshot** for future chats, contributors, and debuggin
 Custom integration for **Global Caché iTach / GC-100** gateways over TCP (default port **4998**): IR remotes, relay switches, serial send/monitor, and low-level TCP services. No external PyPI library — async **`ItachClient`** in-repo.
 
 - **Domain:** `globalcache_itach`
-- **Minimum HA:** see [`hacs.json`](hacs.json) (currently 2024.1)
+- **Minimum HA:** see [`hacs.json`](hacs.json) (currently **2026.6** — requires core `infrared` platform)
 - **HACS:** listed in [hacs/default](https://github.com/hacs/default) (`Shaffer-Softworks/GlobalCache`) — [PR #8063](https://github.com/hacs/default/pull/8063) merged 2026-07-31
-- **Manifest:** [`manifest.json`](custom_components/globalcache_itach/manifest.json) — `integration_type: hub`, version **1.0.2** on `main` (latest GitHub release **v1.0.3**)
-- **Repo layout:** [`custom_components/globalcache_itach/`](custom_components/globalcache_itach/), [`tests/`](tests/) (41 tests), [`docs/images/`](docs/images/) (README screenshots), [`docker-compose.yml`](docker-compose.yml), [`README.md`](README.md)
+- **Manifest:** [`manifest.json`](custom_components/globalcache_itach/manifest.json) — `integration_type: hub`, `dependencies: ["infrared"]`, version **1.1.0**
+- **Repo layout:** [`custom_components/globalcache_itach/`](custom_components/globalcache_itach/), [`tests/`](tests/) , [`docs/images/`](docs/images/) (README screenshots), [`docker-compose.yml`](docker-compose.yml), [`README.md`](README.md)
 
 ## Platforms
 
-`binary_sensor` (TCP connected), `button` (IR command + serial preset), `sensor` (gateway diagnostics + serial **Last received**), `switch` (relay), `text` (serial send). No **`remote`** platform (avoids generic on/off UI; JSON commands are buttons only).
+`binary_sensor` (TCP connected), `button` (IR command + serial preset), **`infrared`** (emitter + optional receiver per IR connector), `sensor` (gateway diagnostics + serial **Last received**), `switch` (relay), `text` (serial send). No **`remote`** platform (avoids generic on/off UI; JSON commands are buttons only).
 
 ## Key modules
 
@@ -28,6 +28,7 @@ Custom integration for **Global Caché iTach / GC-100** gateways over TCP (defau
 | `getdevices` parsing, IR module checks | [`device_util.py`](custom_components/globalcache_itach/device_util.py) |
 | Stale entity cleanup (options-driven) | [`entity_registry_util.py`](custom_components/globalcache_itach/entity_registry_util.py) |
 | UDP multicast + DHCP discovery | [`discovery.py`](custom_components/globalcache_itach/discovery.py) |
+| HA `infrared` emitters/receivers | [`infrared.py`](custom_components/globalcache_itach/infrared.py), [`infrared_util.py`](custom_components/globalcache_itach/infrared_util.py) |
 | `switch` / `text` / `button` / `sensor` / `binary_sensor` | respective `*.py` |
 | Pronto / GC pair conversion | [`pronto.py`](custom_components/globalcache_itach/pronto.py) |
 | Services schema | [`services.yaml`](custom_components/globalcache_itach/services.yaml) |
@@ -37,6 +38,7 @@ Custom integration for **Global Caché iTach / GC-100** gateways over TCP (defau
 
 - **One serialized TCP client per config entry** on the control port (`client.py`). Serial **payload** traffic uses a separate socket per module: **control port + module** (e.g. 4999 for module 1 when control is 4998).
 - **Each configured remote** is a **subdevice** under the gateway (`device_util.async_register_remote_devices`). JSON commands are **`button`** entities only (legacy **`remote.*`** entities removed on reload).
+- **`infrared` platform** — one emitter (+ disabled-by-default receiver) per IR connector from `device_modules` / remotes. Emitters convert `command.get_raw_timings()` (signed µs) → GC pulse pairs → `sendir`. Receivers parse inbound `sendir` lines and call `_handle_received_signal`.
 - **`device_modules`** from `getdevices` is stored on the config entry at setup; **`module_accepts_ir()`** blocks IR to non-IR connectors (avoids `unknowncommand` on GC-100 serial/relay modules). Hints point users to correct modules (GC-100-12: relays **3**, IR **4** and **5**).
 - **GC-100 relay responses** use `state,...` not `setstate,...` — parsed in `client.py` (`RELAY_STATE_RE`).
 - **GC-100** allows only **one** TCP client on **4998**; avoid iHelp/other tools holding that port while HA is connected.
@@ -101,7 +103,7 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 ```bash
 docker compose up -d    # http://localhost:8123
 # Integration mounted: ./custom_components/globalcache_itach → /config/custom_components/globalcache_itach
-python3 -m pytest tests/ -q   # 41 tests, no full HA required
+python3 -m pytest tests/ -q   # unit tests, no full HA required
 ```
 
 ### Refresh README screenshots
@@ -143,4 +145,4 @@ Install via HACS (default feed) preferred; custom-repository install is no longe
 
 ---
 
-*Last updated: 2026-07-31 — HACS default listing merged; README install path updated; latest release v1.0.3.*
+*Last updated: 2026-09-09 — HA `infrared` emitter/receiver platform (v1.1.0); min HA 2026.6.*

@@ -36,11 +36,26 @@ _GATEWAY_UNIQUE_SUFFIXES: frozenset[str] = frozenset(
 )
 
 
+def is_infrared_unique_id(entry_id: str, unique_id: str | None) -> bool:
+    """True for HA infrared emitter/receiver entities (device_modules-driven)."""
+    return bool(unique_id and unique_id.startswith(f"{entry_id}_infrared_"))
+
+
+def infrared_emitter_unique_id(entry_id: str, module: int, port: int) -> str:
+    return f"{entry_id}_infrared_emitter_{module}_{port}"
+
+
+def infrared_receiver_unique_id(entry_id: str, module: int, port: int) -> str:
+    return f"{entry_id}_infrared_receiver_{module}_{port}"
+
+
 def is_options_managed_unique_id(entry_id: str, unique_id: str | None) -> bool:
     """True for remotes/relays/serial entities created from integration options."""
     if not unique_id or not unique_id.startswith(f"{entry_id}_"):
         return False
     if any(unique_id.endswith(suffix) for suffix in _GATEWAY_UNIQUE_SUFFIXES):
+        return False
+    if is_infrared_unique_id(entry_id, unique_id):
         return False
     if unique_id.startswith(f"{entry_id}_relay_"):
         return True

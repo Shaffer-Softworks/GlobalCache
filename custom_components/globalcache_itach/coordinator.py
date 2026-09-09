@@ -111,6 +111,9 @@ class ItachCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._id_lock = asyncio.Lock()
         self._next_id = 1
         self._remove_ir_cb: Callable[[], None] | None = None
+        self._infrared_rx_callbacks: dict[
+            tuple[int, int], list[Callable[[list[int], int | None], None]]
+        ] = {}
         self._serial_sessions: dict[str, SerialPortSession] = {}
         self._serial_session_keys: dict[str, tuple[Any, ...]] = {}
         self._serial_last_rx: dict[str, str] = {}
@@ -376,9 +379,134 @@ class ItachCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 EVENT_IR_RECEIVED,
                 {"config_entry_id": self.config_entry_id, "line": line},
             )
+            await self._dispatch_infrared_receive(line)
 
         if self._remove_ir_cb is None:
             self._remove_ir_cb = self.client.add_ir_received_callback(_cb)
+
+    def register_infrared_receiver(
+        self,
+        module: int,
+        port: int,
+        callback: Callable[[list[int], int | None], None],
+    ) -> Callable[[], None]:
+        """Register a sync callback for decoded IR timings on a connector."""
+        self.enable_ir_receive_events()
+        key = (int(module), int(port))
+        self._infrared_rx_callbacks.setdefault(key, []).append(callback)
+
+        def remove() -> None:
+            cbs = self._infrared_rx_callbacks.get(key)
+            if not cbs:
+                return
+            if callback in cbs:
+                cbs.remove(callback)
+            if not cbs:
+                self._infrared_rx_callbacks.pop(key, None)
+
+        return remove
+
+    async def _dispatch_infrared_receive(self, line: str) -> None:
+        from .infrared_util import gc_pairs_to_us_timings, parse_sendir_line
+
+        parsed = parse_sendir_line(line)
+        if parsed is None:
+            return
+        module = int(parsed["module"])
+        port = int(parsed["port"])
+        # Unified API historically reported port 1 for some receive paths; notify
+        # all listeners for this module when the exact port has no subscribers.
+        exact = self._infrared_rx_callbacks.get((module, port), [])
+        callbacks = list(exact)
+        if not callbacks:
+            for (mod, _port), cbs in self._infrared_rx_callbacks.items():
+                if mod == module:
+                    callbacks.extend(cbs)
+        if not callbacks:
+            return
+        try:
+            timings = gc_pairs_to_us_timings(
+                list(parsed["pairs"]), int(parsed["frequency"])
+            )
+        except ValueError as err:
+            _LOGGER.debug("Ignoring IR receive line: %s (%s)", line, err)
+            return
+        modulation = int(parsed["frequency"])
+        for cb in callbacks:
+            try:
+                cb(timings, modulation)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Infrared receiver callback failed")
+
+    async def async_send_infrared_timings(
+        self,
+        module: int,
+        port: int,
+        timings: list[int],
+        frequency_hz: int,
+        *,
+        repeat: int = 1,
+        offset: int | None = None,
+    ) -> None:
+        """Transmit HA infrared signed-µs timings via sendir."""
+        from .infrared_util import us_timings_to_gc_pairs
+
+        self._ensure_ir_module(module, port)
+        freq = int(frequency_hz) if frequency_hz else int(self._opts[CONF_DEFAULT_FREQ])
+        freq = max(15_000, min(500_000, freq))
+        try:
+            pairs = us_timings_to_gc_pairs(timings, freq)
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+        rep = max(1, min(50, int(repeat)))
+        off = offset if offset is not None else int(self._opts[CONF_DEFAULT_OFFSET])
+        cid = await self.resolve_command_id()
+        try:
+            await self.client.send_sendir(
+                module, port, cid, freq, rep, off, pairs
+            )
+        except ItachError as err:
+            raise ServiceValidationError(str(err)) from err
+        _LOGGER.info(
+            "Infrared entity sent %s:%s module %s port %s id=%s (%s pulse pairs)",
+            self.host,
+            self.port,
+            module,
+            port,
+            cid,
+            len(pairs) // 2,
+        )
+
+    async def async_enable_infrared_receive(self, module: int, port: int) -> None:
+        """Set connector to RECEIVER mode and enable receiveIR streaming."""
+        self._ensure_ir_module(module, port)
+        await self.client.send_raw(
+            f"set_IR,{module}:{port},RECEIVER",
+            end_on=lambda l: l.strip().upper().startswith("IR,")
+            or l.strip().lower().startswith("unknowncommand"),
+            timeout=10.0,
+        )
+        await self.client.send_raw(
+            f"receiveIR,{module}:{port},enabled",
+            end_on=lambda l: l.strip().lower().startswith("receiveir")
+            or l.strip().lower().startswith("unknowncommand"),
+            timeout=10.0,
+        )
+        self.enable_ir_receive_events()
+
+    async def async_disable_infrared_receive(self, module: int, port: int) -> None:
+        """Disable receiveIR streaming on a connector."""
+        try:
+            await self.client.send_raw(
+                f"receiveIR,{module}:{port},disabled",
+                end_on=lambda l: l.strip().lower().startswith("receiveir")
+                or l.strip().lower().startswith("unknowncommand"),
+                timeout=10.0,
+            )
+        except (TimeoutError, OSError, ItachError) as err:
+            _LOGGER.debug(
+                "receiveIR disable failed for %s:%s: %s", module, port, err
+            )
 
     async def async_get_relay_state(self, module: int, port: int) -> bool:
         return await self.client.get_relay_state(module, port)

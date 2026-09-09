@@ -3,11 +3,11 @@
 [![Validate](https://github.com/Shaffer-Softworks/GlobalCache/actions/workflows/validate.yaml/badge.svg)](https://github.com/Shaffer-Softworks/GlobalCache/actions/workflows/validate.yaml)
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
 
-Home Assistant custom integration for **Global Caché iTach** and **GC-100** TCP/IP gateways (e.g. IP2IR, IP2CC, IP2SL). It adds a **config flow** (including optional **connect timeout**), **options flow** for IR defaults, remotes, **relays**, and **serial ports**, per-command **`button`** entities (Pronto, GC pulse pairs, or full **`sendir`** lines), **`switch`** / **`text`** / **`button`** entities for relay and serial connectors, diagnostic sensors, and **services** covering the TCP API (IR, LED, relay, serial, and raw lines).
+Home Assistant custom integration for **Global Caché iTach** and **GC-100** TCP/IP gateways (e.g. IP2IR, IP2CC, IP2SL). It adds a **config flow** (including optional **connect timeout**), **options flow** for IR defaults, remotes, **relays**, and **serial ports**, per-command **`button`** entities (Pronto, GC pulse pairs, or full **`sendir`** lines), native Home Assistant **`infrared`** emitter/receiver entities (HA **2026.6+**), **`switch`** / **`text`** / **`button`** entities for relay and serial connectors, diagnostic sensors, and **services** covering the TCP API (IR, LED, relay, serial, and raw lines).
 
-Minimum Home Assistant version: **2024.1** (see [`hacs.json`](hacs.json)). The integration is declared as a **`hub`** (gateway) so Home Assistant does not offer a broken **“Add device”** device-subentry flow for a single-purpose TCP bridge.
+Minimum Home Assistant version: **2026.6** (see [`hacs.json`](hacs.json)) — required for the core [`infrared`](https://www.home-assistant.io/integrations/infrared/) entity platform. The integration is declared as a **`hub`** (gateway) so Home Assistant does not offer a broken **“Add device”** device-subentry flow for a single-purpose TCP bridge.
 
-There is **no `remote` platform** — each JSON command becomes its own **button** on a per-remote device (no generic on/off remote card).
+There is **no `remote` platform** — each JSON command becomes its own **button** on a per-remote device (no generic on/off remote card). Learned Pronto / GC codes stay as buttons; brand integrations such as [LG Infrared](https://www.home-assistant.io/integrations/lg_infrared/) can instead target the gateway’s **`infrared`** emitter entities.
 
 ## Screenshots
 
@@ -102,11 +102,13 @@ Open **Configure** on the integration card (gear icon on older layouts):
 
 ### Devices and entities
 
-Each **gateway** is one hub device with diagnostic sensors (**TCP connected**, **Last gateway poll**, **Configured remotes**, optional **Gateway diagnostics**). Each configured **remote** appears as a child device with one **button** per JSON command.
+Each **gateway** is one hub device with diagnostic sensors (**TCP connected**, **Last gateway poll**, **Configured remotes**, optional **Gateway diagnostics**), plus one **`infrared` emitter** (and a disabled-by-default **receiver**) per IR connector discovered via `getdevices`. Each configured **remote** appears as a child device with one **button** per JSON command.
 
 ![Gateway device](docs/images/gateway-device.png)
 
 ![IR remote with buttons](docs/images/remote-device.png)
+
+**Home Assistant Infrared (2026.4 / 2026.6):** emitter entities appear as selectable targets for consumer integrations (for example **LG Infrared**). Receiver entities stay disabled until you enable them; enabling one runs `set_IR … RECEIVER` and `receiveIR … enabled` on that connector (do not enable a receiver on a port you still use as a blaster).
 
 **Relays** and **serial ports** attach to the gateway device (GC-100 example with relay switch, serial text, and preset button):
 
@@ -150,12 +152,13 @@ Serial preset JSON uses `name` and `payload` (see options hint text).
 | iTach / unified TCP | Home Assistant |
 |---------------------|----------------|
 | `sendir` (Pronto → GC conversion) | Per-command **button** entities, `globalcache_itach.sendir` / `send_command` services |
+| `sendir` (HA `infrared` signed-µs timings) | **`infrared` emitter** entities per IR connector (for LG Infrared and other consumers) |
 | `completeir` / `busyIR` | Handled internally in the TCP client |
 | `stopir` | `globalcache_itach.stop_ir` service |
 | `set_LED_LIGHTING` / `get_LED_LIGHTING` | `globalcache_itach.set_led_lighting` / `get_led_lighting` |
 | `get_IR` / `set_IR` | `globalcache_itach.get_ir` / `set_ir` |
 | `get_IRL` / `stop_IRL` | `globalcache_itach.ir_learner_start` / `ir_learner_stop` (+ bus event `globalcache_itach_ir_learned`) |
-| `receiveIR` | `globalcache_itach.receive_ir` (+ bus event `globalcache_itach_ir_received` when unsolicited `sendir`/`IR` lines arrive) |
+| `receiveIR` | `globalcache_itach.receive_ir` (+ bus event `globalcache_itach_ir_received`); enabling an **`infrared` receiver** entity also sets RECEIVER mode + `receiveIR` |
 | `getdevices`, `getversion`, `get_NET` | Coordinator refresh, **Gateway diagnostics** sensor (off by default), diagnostics download, and `get_devices` / `get_version` / `get_net` services |
 | Arbitrary ASCII line | `globalcache_itach.send_raw` or **`send_command`** (same behaviour; collects lines for `collect_seconds`) |
 | `setstate` / `getstate` | **Configure → Add relay** → `switch` entities; services `set_relay`, `get_relay`, `pulse_relay` |
@@ -169,6 +172,7 @@ Protocol reference: [iTach API (PDF)](https://www.globalcache.com/files/docs/API
 - **Relay** and **serial** connectors are configured in **integration options** (like remotes). Serial payloads use the Unified TCP data socket (**control port + module**, e.g. 4999 for module 1 when control is 4998). Confirm module/port wiring on your SKU (IP2CC relays are often module **3**; **GC-100-12** relays are module **3**, IR emitters modules **4** and **5** — run `get_devices` or check diagnostics).
 - **GC-100** allows only **one** TCP client on port **4998** at a time; avoid iHelp/other tools holding that port while Home Assistant is connected.
 - **IR learner** output is exposed via events and logs; it does not replace Global Caché’s **iLearn** utility for every workflow.
+- **`infrared` receivers** are disabled by default because enabling them switches the connector to RECEIVER mode (incompatible with using that same port as a blaster).
 - Removing a remote, relay, or serial port from options **deletes** its entities from the registry on reload (they are not left as orphaned grey entities).
 
 ## Development
@@ -178,7 +182,7 @@ pip install pytest pytest-asyncio voluptuous
 pytest tests/
 ```
 
-The test suite (32 tests) exercises **Pronto parsing**, **device/entity helpers**, **serial sessions**, and the **async TCP client** against a fake iTach server (no Home Assistant install required for those tests).
+The test suite exercises **Pronto parsing**, **infrared timing conversion**, **device/entity helpers**, **serial sessions**, and the **async TCP client** against a fake iTach server (no Home Assistant install required for those tests).
 
 ### Refreshing README screenshots
 

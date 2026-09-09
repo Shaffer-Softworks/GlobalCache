@@ -80,6 +80,32 @@ def ir_connectors_hint(modules: list[dict[str, Any]]) -> str:
     return "IR connectors on this device: " + ", ".join(bits) + "."
 
 
+def list_ir_connectors(
+    modules: list[dict[str, Any]],
+    *,
+    remotes: list[dict[str, Any]] | None = None,
+) -> list[tuple[int, int]]:
+    """IR (module, port) pairs from getdevices, else unique remote connectors, else 1:1."""
+    from .const import CONF_CONN_PORT, CONF_MODULE
+    from .infrared_util import ir_connectors_from_modules
+
+    connectors = ir_connectors_from_modules(modules)
+    if connectors:
+        return connectors
+    seen: set[tuple[int, int]] = set()
+    out: list[tuple[int, int]] = []
+    for spec in remotes or []:
+        try:
+            key = (int(spec[CONF_MODULE]), int(spec[CONF_CONN_PORT]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out or [(1, 1)]
+
+
 def gateway_via_device(entry_id: str) -> tuple[str, str]:
     """Single identifier tuple for ``via_device`` (not a set)."""
     from .const import DOMAIN
