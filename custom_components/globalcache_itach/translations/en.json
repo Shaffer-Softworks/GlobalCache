@@ -148,6 +148,19 @@
           "remote_id": "Remote"
         }
       },
+      "learn_ir": {
+        "title": "Learn IR command",
+        "description": "Capture a code with the iTach pinhole learner and add it to a remote as a button.",
+        "data": {
+          "remote_id": "Remote",
+          "name": "Command name",
+          "timeout": "Listen timeout"
+        }
+      },
+      "learn_ir_capture": {
+        "title": "Capture IR",
+        "description": "Click Submit, then within {timeout}s hold the handheld remote 1–2 inches from the iTach pinhole and press the button for “{command}”. {detail}"
+      },
       "relay_name": {
         "title": "Relay name",
         "data": {
@@ -215,6 +228,14 @@
           "serial_id": "Serial port"
         }
       }
+    },
+    "error": {
+      "command_name_required": "Enter a command name.",
+      "not_loaded": "Integration is not loaded. Reload Global Caché iTach and try again.",
+      "learn_failed": "Could not learn IR code."
+    },
+    "abort": {
+      "no_remotes": "Add a remote first, then use Learn IR command."
     }
   }
 }

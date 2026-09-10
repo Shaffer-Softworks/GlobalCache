@@ -16,15 +16,18 @@ from custom_components.globalcache_itach.infrared_util import (
 
 def test_us_to_gc_roundtrip_approx() -> None:
     freq = 38000
-    # NEC-like leader + bit
+    # NEC-like leader + bit + end mark (odd length; needs trailing gap)
     timings = [9000, -4500, 562, -562, 562, -1687, 562]
     pairs = us_timings_to_gc_pairs(timings, freq)
     assert len(pairs) % 2 == 0
     assert pairs[0] > 100  # ~9000 µs at 38 kHz
+    # Trailing pad must be a frame gap (~40 ms), not the ~80 µs minimum
+    assert pairs[-1] > 1000
     back = gc_pairs_to_us_timings(pairs, freq)
     assert back[0] > 0 and back[1] < 0
     # Round-trip within one carrier period (~26 µs)
     assert abs(abs(back[0]) - 9000) < 40
+    assert abs(abs(back[-1]) - 40_000) < 40
 
 
 def test_us_empty_raises() -> None:

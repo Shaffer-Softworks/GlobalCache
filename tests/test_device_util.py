@@ -29,6 +29,16 @@ def test_module_accepts_ir() -> None:
     assert module_accepts_ir(mods, 3) is False
 
 
+def test_list_ir_connectors_legacy_model() -> None:
+    from custom_components.globalcache_itach.device_util import list_ir_connectors
+
+    assert list_ir_connectors([], legacy_model="device,1,3 IR") == [
+        (1, 1),
+        (1, 2),
+        (1, 3),
+    ]
+
+
 def test_list_ir_connectors_from_getdevices() -> None:
     from custom_components.globalcache_itach.device_util import list_ir_connectors
 

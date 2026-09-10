@@ -1,0 +1,12 @@
+{
+  "entity": {
+    "infrared": {
+      "infrared_emitter": {
+        "default": "mdi:led-on"
+      },
+      "infrared_receiver": {
+        "default": "mdi:led-off"
+      }
+    }
+  }
+}

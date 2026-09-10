@@ -84,12 +84,21 @@ def list_ir_connectors(
     modules: list[dict[str, Any]],
     *,
     remotes: list[dict[str, Any]] | None = None,
+    legacy_model: str | None = None,
 ) -> list[tuple[int, int]]:
-    """IR (module, port) pairs from getdevices, else unique remote connectors, else 1:1."""
+    """IR (module, port) pairs from getdevices, else unique remote connectors, else 1:1.
+
+    ``legacy_model`` accepts older entries that stored a raw getdevices line as model
+    (e.g. ``device,1,3 IR``).
+    """
     from .const import CONF_CONN_PORT, CONF_MODULE
     from .infrared_util import ir_connectors_from_modules
 
     connectors = ir_connectors_from_modules(modules)
+    if not connectors and legacy_model:
+        connectors = ir_connectors_from_modules(
+            parse_getdevices_lines([_normalize_device_line(legacy_model)])
+        )
     if connectors:
         return connectors
     seen: set[tuple[int, int]] = set()
@@ -104,6 +113,18 @@ def list_ir_connectors(
         seen.add(key)
         out.append(key)
     return out or [(1, 1)]
+
+
+def _normalize_device_line(raw: str) -> str:
+    """Turn ``device,1,3 IR`` into ``device,1,3,IR`` for parse_getdevices_lines."""
+    text = raw.strip()
+    if not text.lower().startswith("device,"):
+        return text
+    # "device,1,3 IR" / "device,1,3, IR"
+    parts = [p.strip() for p in text.replace(",", " ").split() if p.strip()]
+    if len(parts) >= 4 and parts[0].lower() == "device":
+        return ",".join(parts[:4])
+    return text
 
 
 def gateway_via_device(entry_id: str) -> tuple[str, str]:

@@ -8,6 +8,10 @@ from typing import Any
 
 # Global Caché requires every on/off duration to be at least ~80 µs.
 _MIN_DURATION_US = 80
+# NEC (and similar) frames end on a mark with no trailing space in
+# infrared-protocols. sendir needs an off pulse; ~80 µs truncates the frame
+# so receivers never decode. Use a typical end-of-frame gap (~40 ms).
+_DEFAULT_TRAILING_GAP_US = 40_000
 
 _SENDIR_RE = re.compile(
     r"^sendir,(\d+):(\d+),(\d+),(\d+),(\d+),(\d+),(.+)$",
@@ -38,15 +42,16 @@ def pulses_to_us(pulses: int, frequency_hz: int) -> int:
 def us_timings_to_gc_pairs(timings: list[int], frequency_hz: int) -> list[int]:
     """Flatten signed µs timings (mark+, space-) into GC on/off pulse pairs.
 
-    A trailing mark-only timing is padded with a minimum off pulse so sendir
-    always receives an even number of values.
+    A trailing mark-only timing is padded with a ~40 ms off pulse so sendir
+    always receives an even number of values and IR receivers see a frame gap
+    (infrared-protocols NEC ends on a mark with no trailing space).
     """
     if not timings:
         msg = "IR command has no timings"
         raise ValueError(msg)
     pairs = [us_to_pulses(t, frequency_hz) for t in timings]
     if len(pairs) % 2 == 1:
-        pairs.append(_min_pulses(frequency_hz))
+        pairs.append(us_to_pulses(_DEFAULT_TRAILING_GAP_US, frequency_hz))
     if len(pairs) > 520:
         msg = f"Too many pulse values for sendir ({len(pairs)} > 520)"
         raise ValueError(msg)

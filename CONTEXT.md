@@ -69,7 +69,7 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 
 2. **Options flow menus** — some steps use **`vol.In({...})`** instead of **`SelectSelector`** for broader HA compatibility.
 
-3. **Translations** — `options.step.remote_commands` needs **`description`** + **`{hint}`** placeholder. **`options.step.init.data.next`** in `strings.json`. IR/serial command JSON uses **`TextSelector(multiline=True)`** (textarea), not a single-line field.
+3. **Translations** — `options.step.remote_commands` needs **`description`** + **`{hint}`** placeholder. **`options.step.init.data.next`** in `strings.json`. IR/serial command JSON uses **`TextSelector(multiline=True)`** (textarea), not a single-line field. Learn IR uses **`learn_ir`** / **`learn_ir_capture`** with placeholders `{timeout}`, `{command}`, `{detail}`.
 
 4. **Do not use `listen` as a config-flow field key** — Home Assistant does not apply `options.step.*.data.listen` labels; UI shows raw `listen`. Use **`monitor_incoming`** with label *Monitor incoming data (persistent connection)* (plain **`bool`**, same as `append_cr`).
 
@@ -83,7 +83,7 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 
 9. **Reconfigure** — **⋮ → Reconfigure** updates host/port/name/timeouts, refreshes `device_modules`, reloads entry.
 
-10. **README screenshots** — PNGs in [`docs/images/`](docs/images/), driven by [`docs/screenshot-manifest.yaml`](docs/screenshot-manifest.yaml). Regenerate with `HA_REFRESH_TOKEN=… python3 scripts/capture_screenshots.py` (delegates to personal skill **`ha-integration-screenshots`** at `~/.cursor/skills/`). Never commit tokens.
+10. **README screenshots** — PNGs in [`docs/images/`](docs/images/), driven by [`docs/screenshot-manifest.yaml`](docs/screenshot-manifest.yaml). Includes gateway IR emitters, options (Learn IR), and optional **LG Infrared** consumer device. Regenerate with `HA_REFRESH_TOKEN=… python3 scripts/capture_screenshots.py` (skill **`ha-integration-screenshots`**). `ha_url` must match the token `client_id` (use `http://127.0.0.1:8124` for this Docker stack). Never commit tokens (`.ha_refresh_token` is gitignored).
 
 11. **HA 2026.2+ `DhcpServiceInfo`** — import from `homeassistant.helpers.service_info.dhcp`, **not** `homeassistant.components.dhcp` (removed in HA Core 2026.2). Fixed on `main` in PR #6 (`fix/dhcp-service-info-import`). **v1.0.1 does not include this fix** — cut **v1.0.2** for production/HACS.
 
@@ -91,17 +91,20 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 
 13. **Git / releases** — semver bumps via [`.github/workflows/release.yml`](.github/workflows/release.yml) (workflow_dispatch). Each release attaches **`globalcache_itach.zip`** (integration files at zip root) for HACS `zip_release` download counting; [`hacs.json`](hacs.json) sets `zip_release` + `filename`. `WORKFLOW_TRIGGER_TOKEN` enables automated manifest-bump PRs; without it, open the compare URL from the workflow summary. **Do not** add `Co-authored-by: Cursor` to commits; history was rewritten (2026-06-05) to remove it from `main` and retag `v1.0.0`.
 
+14. **Pinhole Learn IR** — Options **Learn IR command (pinhole)** calls `get_IRL`, waits for one `sendir` line, `stop_IRL`, then stores `full_sendir` on the chosen remote via `rewrite_sendir_connector` (learner always reports `1:1`).
+
+15. **Infrared timing padding** — `infrared-protocols` NEC (and similar) frames end on a mark with no trailing space. `us_timings_to_gc_pairs` pads with a **~40 ms** off pulse (not the ~80 µs GC minimum), otherwise LG Infrared / other consumers fail to decode on the TV.
 ## Documentation
 
 - **[`README.md`](README.md)** — user-facing install, configure, API mapping, screenshot gallery.
-- **[`docs/images/`](docs/images/)** — committed UI screenshots (integrations, config flow, options, devices).
-- **[`docs/screenshot-manifest.yaml`](docs/screenshot-manifest.yaml)** — Playwright capture plan (device selectors, paths, actions).
+- **[`docs/images/`](docs/images/)** — committed UI screenshots (integrations, config flow, options with Learn IR, gateway emitters, remotes, LG Infrared example, GC-100).
+- **[`docs/screenshot-manifest.yaml`](docs/screenshot-manifest.yaml)** — Playwright capture plan (device selectors, paths, actions). Docker HA is on host port **8124**.
 - **Cursor skill:** `~/.cursor/skills/ha-integration-screenshots/` — reusable across all HA custom integration repos.
 
 ## Dev environment
 
 ```bash
-docker compose up -d    # http://localhost:8123
+docker compose up -d    # http://localhost:8124 (maps to container 8123)
 # Integration mounted: ./custom_components/globalcache_itach → /config/custom_components/globalcache_itach
 python3 -m pytest tests/ -q   # unit tests, no full HA required
 ```
@@ -109,7 +112,7 @@ python3 -m pytest tests/ -q   # unit tests, no full HA required
 ### Refresh README screenshots
 
 ```bash
-export HA_REFRESH_TOKEN="<dev instance token>"
+export HA_REFRESH_TOKEN="<dev instance token>"   # client_id must match ha_url in manifest
 pip install playwright requests pyyaml && python3 -m playwright install chromium
 python3 scripts/capture_screenshots.py
 # or: python3 ~/.cursor/skills/ha-integration-screenshots/scripts/capture_ha_screenshots.py --repo-root .

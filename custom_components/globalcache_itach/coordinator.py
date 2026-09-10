@@ -371,6 +371,57 @@ class ItachCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             len(pairs) // 2,
         )
 
+    async def async_learn_ir_command(self, *, timeout: float = 30.0) -> str:
+        """Enable the onboard learner, wait for one ``sendir`` line, then stop.
+
+        Hold the handheld remote 1–2 inches from the iTach pinhole and press one
+        button after this coroutine starts. Returns the captured ``sendir`` line.
+        """
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[str] = loop.create_future()
+
+        async def _cb(line: str) -> None:
+            if future.done():
+                return
+            if line.lower().startswith("sendir,"):
+                future.set_result(line.strip())
+
+        remove = self.client.add_ir_received_callback(_cb)
+        try:
+            lines = await self.client.send_raw(
+                "get_IRL",
+                end_on=lambda l: "learner" in l.lower()
+                or "disabled" in l.lower()
+                or "unavailable" in l.lower(),
+                timeout=10.0,
+            )
+            joined = " ".join(lines).lower()
+            if "unavailable" in joined:
+                msg = "IR learner unavailable (check LED lighting / device mode)"
+                raise ServiceValidationError(msg)
+            if "disabled" in joined and "enabled" not in joined:
+                msg = "IR learner did not enable"
+                raise ServiceValidationError(msg)
+            try:
+                return await asyncio.wait_for(future, timeout=max(5.0, float(timeout)))
+            except TimeoutError as err:
+                msg = (
+                    f"No IR code received within {int(timeout)}s. "
+                    "Hold the remote 1–2 inches from the pinhole and press one button."
+                )
+                raise ServiceValidationError(msg) from err
+        finally:
+            remove()
+            try:
+                await self.client.send_raw(
+                    "stop_IRL",
+                    end_on=lambda l: "learner" in l.lower()
+                    or "disabled" in l.lower(),
+                    timeout=10.0,
+                )
+            except (TimeoutError, OSError, ItachError) as err:
+                _LOGGER.debug("stop_IRL after learn failed: %s", err)
+
     def enable_ir_receive_events(self) -> None:
         """Fire HA events for unsolicited IR lines (receiveIR / learner output)."""
 

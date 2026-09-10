@@ -10,7 +10,8 @@ services:
     # Do not use init: true — Home Assistant's s6-overlay must run as PID 1
     # ("s6-overlay-suexec: fatal: can only run as pid 1" otherwise).
     ports:
-      - "8123:8123"
+      # Host 8124 avoids conflict with other local HA containers on 8123
+      - "8124:8123"
     volumes:
       # Persistent HA configuration (database, UI-created config, etc.)
       - ./docker_data/config:/config
