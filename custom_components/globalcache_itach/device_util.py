@@ -25,10 +25,15 @@ _UNKNOWN_RE = re.compile(r"^unknowncommand,?\s*(\d+)?", re.IGNORECASE)
 
 
 def parse_getdevices_lines(lines: list[str]) -> list[dict[str, Any]]:
-    """Parse ``device,module,port_count,TYPE`` lines from getdevices."""
+    """Parse ``device,module,port_count,TYPE`` lines from getdevices.
+
+    Real GC/iTach firmware uses a space before TYPE (``device,1,3 IR``);
+    normalize that to comma form before splitting.
+    """
     modules: list[dict[str, Any]] = []
     for line in lines:
-        parts = [p.strip() for p in line.strip().split(",")]
+        normalized = _normalize_device_line(line)
+        parts = [p.strip() for p in normalized.split(",")]
         if len(parts) < 4 or parts[0].lower() != "device":
             continue
         try:
