@@ -23,6 +23,24 @@ def test_parse_gc100_12() -> None:
     assert mods[3] == {"module": 4, "ports": 3, "type": "IR"}
 
 
+def test_parse_space_separated_type() -> None:
+    """Real iTach/GC firmware uses ``device,1,3 IR`` (space before TYPE)."""
+    mods = parse_getdevices_lines(
+        [
+            "device,0,0 ETHERNET",
+            "device,1,3 IR",
+            "endlistdevices",
+        ]
+    )
+    assert mods == [
+        {"module": 0, "ports": 0, "type": "ETHERNET"},
+        {"module": 1, "ports": 3, "type": "IR"},
+    ]
+    from custom_components.globalcache_itach.device_util import list_ir_connectors
+
+    assert list_ir_connectors(mods) == [(1, 1), (1, 2), (1, 3)]
+
+
 def test_module_accepts_ir() -> None:
     mods = parse_getdevices_lines(GC100_12_LINES)
     assert module_accepts_ir(mods, 4) is True
