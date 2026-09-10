@@ -173,6 +173,36 @@ def async_register_remote_devices(hass: HomeAssistant, entry: ConfigEntry) -> No
         )
 
 
+def async_cleanup_stale_remote_devices(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Remove HA devices for remotes no longer present in integration options."""
+    from homeassistant.helpers import device_registry as dr
+
+    from .const import CONF_REMOTE_ID, CONF_REMOTES, DOMAIN
+
+    registry = dr.async_get(hass)
+    entry_id = entry.entry_id
+    active_remote_ids = {
+        str(spec.get(CONF_REMOTE_ID, "")).strip()
+        for spec in entry.options.get(CONF_REMOTES, [])
+        if str(spec.get(CONF_REMOTE_ID, "")).strip()
+    }
+    for device in list(dr.async_entries_for_config_entry(registry, entry_id)):
+        remote_id: str | None = None
+        for ident in device.identifiers:
+            if (
+                len(ident) == 3
+                and ident[0] == DOMAIN
+                and ident[1] == entry_id
+            ):
+                remote_id = str(ident[2])
+                break
+        if remote_id is None or remote_id in active_remote_ids:
+            continue
+        registry.async_remove_device(device.id)
+
+
 def format_unknown_command(line: str) -> str:
     """Turn ``unknowncommand,N`` into a short explanation for logs/UI."""
     text = line.strip()

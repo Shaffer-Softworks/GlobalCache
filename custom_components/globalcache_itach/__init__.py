@@ -88,11 +88,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from homeassistant.helpers import device_registry as dr
 
     from .coordinator import ItachCoordinator
-    from .device_util import async_register_remote_devices
+    from .device_util import (
+        async_cleanup_stale_remote_devices,
+        async_register_remote_devices,
+    )
     from .entity_registry_util import async_cleanup_stale_entities
 
     # Drop removed remotes/serial/relay entities before TCP setup (refresh can fail).
     async_cleanup_stale_entities(hass, entry)
+    async_cleanup_stale_remote_devices(hass, entry)
 
     hass.data.setdefault(DOMAIN, {})
     coordinator = ItachCoordinator(hass, entry, dict(entry.data), dict(entry.options))
@@ -161,9 +165,11 @@ async def _async_ensure_device_modules(
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload integration when options change."""
+    from .device_util import async_cleanup_stale_remote_devices
     from .entity_registry_util import async_cleanup_stale_entities
 
     async_cleanup_stale_entities(hass, entry)
+    async_cleanup_stale_remote_devices(hass, entry)
     await hass.config_entries.async_reload(entry.entry_id)
 
 
