@@ -29,6 +29,25 @@ def test_module_accepts_ir() -> None:
     assert module_accepts_ir(mods, 3) is False
 
 
+def test_list_ir_connectors_legacy_model() -> None:
+    from custom_components.globalcache_itach.device_util import list_ir_connectors
+
+    assert list_ir_connectors([], legacy_model="device,1,3 IR") == [
+        (1, 1),
+        (1, 2),
+        (1, 3),
+    ]
+
+
+def test_list_ir_connectors_from_getdevices() -> None:
+    from custom_components.globalcache_itach.device_util import list_ir_connectors
+
+    mods = parse_getdevices_lines(GC100_12_LINES)
+    connectors = list_ir_connectors(mods)
+    assert (4, 1) in connectors and (5, 3) in connectors
+    assert len(connectors) == 6
+
+
 def test_unknowncommand_21_message() -> None:
     msg = format_unknown_command("unknowncommand 21")
     assert "not an IR module" in msg

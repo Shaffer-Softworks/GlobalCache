@@ -1,5 +1,6 @@
 domain: globalcache_itach
-ha_url: http://localhost:8123
+# Must match the client_id used when obtaining HA_REFRESH_TOKEN (127.0.0.1 vs localhost).
+ha_url: http://127.0.0.1:8124
 output_dir: docs/images
 integration_type: hub
 viewport:
@@ -22,9 +23,16 @@ screenshots:
 
   - name: gateway-device.png
     device: gateway
+    wait_ms: 2500
 
   - name: remote-device.png
     device: by_model:IR remote
 
+  # GC-100 demo device (skipped when not present on the dev instance)
   - name: gc100-gateway.png
     device: by_name:GC100
+
+  # LG Infrared consuming an iTach emitter (optional consumer example)
+  - name: lg-infrared-device.png
+    path: /config/devices/device/cea9b0a3a7f3a43ed5344a27560eb8cb
+    wait_ms: 2500

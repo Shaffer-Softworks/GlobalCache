@@ -3,11 +3,11 @@
 [![Validate](https://github.com/Shaffer-Softworks/GlobalCache/actions/workflows/validate.yaml/badge.svg)](https://github.com/Shaffer-Softworks/GlobalCache/actions/workflows/validate.yaml)
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
 
-Home Assistant custom integration for **Global Caché iTach** and **GC-100** TCP/IP gateways (e.g. IP2IR, IP2CC, IP2SL). It adds a **config flow** (including optional **connect timeout**), **options flow** for IR defaults, remotes, **relays**, and **serial ports**, per-command **`button`** entities (Pronto, GC pulse pairs, or full **`sendir`** lines), **`switch`** / **`text`** / **`button`** entities for relay and serial connectors, diagnostic sensors, and **services** covering the TCP API (IR, LED, relay, serial, and raw lines).
+Home Assistant custom integration for **Global Caché iTach** and **GC-100** TCP/IP gateways (e.g. IP2IR, IP2CC, IP2SL). It adds a **config flow** (including optional **connect timeout**), **options flow** for IR defaults, remotes, **relays**, and **serial ports**, per-command **`button`** entities (Pronto, GC pulse pairs, or full **`sendir`** lines), native Home Assistant **`infrared`** emitter/receiver entities (HA **2026.6+**), **`switch`** / **`text`** / **`button`** entities for relay and serial connectors, diagnostic sensors, and **services** covering the TCP API (IR, LED, relay, serial, and raw lines).
 
-Minimum Home Assistant version: **2024.1** (see [`hacs.json`](hacs.json)). The integration is declared as a **`hub`** (gateway) so Home Assistant does not offer a broken **“Add device”** device-subentry flow for a single-purpose TCP bridge.
+Minimum Home Assistant version: **2026.6** (see [`hacs.json`](hacs.json)) — required for the core [`infrared`](https://www.home-assistant.io/integrations/infrared/) entity platform. The integration is declared as a **`hub`** (gateway) so Home Assistant does not offer a broken **“Add device”** device-subentry flow for a single-purpose TCP bridge.
 
-There is **no `remote` platform** — each JSON command becomes its own **button** on a per-remote device (no generic on/off remote card).
+There is **no `remote` platform** — each JSON command becomes its own **button** on a per-remote device (no generic on/off remote card). Learned Pronto / GC codes stay as buttons; brand integrations such as [LG Infrared](https://www.home-assistant.io/integrations/lg_infrared/) can instead target the gateway’s **`infrared`** emitter entities.
 
 ## Screenshots
 
@@ -15,17 +15,17 @@ There is **no `remote` platform** — each JSON command becomes its own **button
 |---|---|
 | [![Integrations](docs/images/integrations.png)](docs/images/integrations.png) | [![Integration detail](docs/images/integration-detail.png)](docs/images/integration-detail.png) |
 
-| Add / reconfigure hub | Options menu |
+| Add / reconfigure hub | Options menu (incl. Learn IR) |
 |---|---|
 | [![Config flow](docs/images/config-flow.png)](docs/images/config-flow.png) | [![Options menu](docs/images/options-menu.png)](docs/images/options-menu.png) |
 
-| Gateway device (diagnostics) | IR remote (command buttons) |
+| Gateway (IR emitters + diagnostics) | IR remote (command buttons) |
 |---|---|
 | [![Gateway device](docs/images/gateway-device.png)](docs/images/gateway-device.png) | [![Remote device](docs/images/remote-device.png)](docs/images/remote-device.png) |
 
-| GC-100 gateway (relay + serial) |
-|---|
-| [![GC-100 gateway](docs/images/gc100-gateway.png)](docs/images/gc100-gateway.png) |
+| LG Infrared via iTach emitter | GC-100 gateway (relay + serial) |
+|---|---|
+| [![LG Infrared](docs/images/lg-infrared-device.png)](docs/images/lg-infrared-device.png) | [![GC-100 gateway](docs/images/gc100-gateway.png)](docs/images/gc100-gateway.png) |
 
 ## Installation
 
@@ -53,7 +53,9 @@ From the repository root (Docker Desktop or another engine with Compose v2):
 docker compose up -d
 ```
 
-Open [http://localhost:8123](http://localhost:8123), complete the onboarding wizard, then add **Global Caché iTach** under **Settings → Devices & services**.
+Open [http://localhost:8124](http://localhost:8124), complete the onboarding wizard, then add **Global Caché iTach** under **Settings → Devices & services**.
+
+(Host port **8124** maps to container 8123 so this stack can run alongside another local HA on 8123.)
 
 - **Config volume**: [`docker_data/config`](docker_data/config) stores Home Assistant’s full `/config` (ignored by git except [`.gitkeep`](docker_data/config/.gitkeep)).
 - **Integration mount**: the container bind-mounts [`custom_components/globalcache_itach`](custom_components/globalcache_itach) into `/config/custom_components/globalcache_itach` read-only so edits in the repo are visible after **Developer tools → YAML → Restart** (or a container restart).
@@ -96,17 +98,24 @@ Open **Configure** on the integration card (gear icon on older layouts):
 | **IR defaults** | Carrier frequency, repeat, offset, sendir ID policy (auto-increment vs fixed). |
 | **Timeouts** | Connect and command timeouts. |
 | **Add remote** | Name, module/port (e.g. module `1`, port `2` → connector **1:2**), repeat multiplier, **JSON command list**. |
+| **Learn IR command (pinhole)** | Pick a remote and command name → Submit → aim the handheld at the iTach **pinhole** within the timeout. Saves a **`full_sendir`** button (rewrites connector to the remote’s module:port). Same name replaces an existing command. |
 | **Edit remote** / **Remove remote** | Change or delete a configured remote (entity IDs stay stable on edit). |
 | **Add relay** / **Edit relay** / **Remove relay** | Relay `switch` entities via `setstate` / `getstate`. |
 | **Add serial port** / **Edit serial** / **Remove serial** | Serial `text` entity, optional preset **buttons**, **Last received** sensor. |
 
 ### Devices and entities
 
-Each **gateway** is one hub device with diagnostic sensors (**TCP connected**, **Last gateway poll**, **Configured remotes**, optional **Gateway diagnostics**). Each configured **remote** appears as a child device with one **button** per JSON command.
+Each **gateway** is one hub device with diagnostic sensors (**TCP connected**, **Last gateway poll**, **Configured remotes**, optional **Gateway diagnostics**), plus one **`infrared` emitter** (and a disabled-by-default **receiver**) per IR connector discovered via `getdevices`. Each configured **remote** appears as a child device with one **button** per JSON command.
 
 ![Gateway device](docs/images/gateway-device.png)
 
 ![IR remote with buttons](docs/images/remote-device.png)
+
+**Home Assistant Infrared (2026.4 / 2026.6):** each IR jack from `getdevices` becomes an **`infrared` emitter** (e.g. **IR emitter 1:1**). Point brand integrations such as [LG Infrared](https://www.home-assistant.io/integrations/lg_infrared/) at one of those emitters:
+
+![LG Infrared using an iTach emitter](docs/images/lg-infrared-device.png)
+
+Receiver entities appear only when a connector is already in **`RECEIVER`** mode (`get_IR`); they stay disabled by default. Enabling a receiver runs `set_IR … RECEIVER` and `receiveIR … enabled` on that jack (do not enable a receiver on a port you still use as a blaster). IP2IR’s three jacks are emitters by default; the **pinhole learner** (`get_IRL`) is separate — use **Configure → Learn IR command (pinhole)** to capture codes onto a remote.
 
 **Relays** and **serial ports** attach to the gateway device (GC-100 example with relay switch, serial text, and preset button):
 
@@ -150,12 +159,13 @@ Serial preset JSON uses `name` and `payload` (see options hint text).
 | iTach / unified TCP | Home Assistant |
 |---------------------|----------------|
 | `sendir` (Pronto → GC conversion) | Per-command **button** entities, `globalcache_itach.sendir` / `send_command` services |
+| `sendir` (HA `infrared` signed-µs timings) | **`infrared` emitter** entities per IR connector (for LG Infrared and other consumers); trailing mark padded with ~40 ms frame gap for NEC |
 | `completeir` / `busyIR` | Handled internally in the TCP client |
 | `stopir` | `globalcache_itach.stop_ir` service |
 | `set_LED_LIGHTING` / `get_LED_LIGHTING` | `globalcache_itach.set_led_lighting` / `get_led_lighting` |
 | `get_IR` / `set_IR` | `globalcache_itach.get_ir` / `set_ir` |
-| `get_IRL` / `stop_IRL` | `globalcache_itach.ir_learner_start` / `ir_learner_stop` (+ bus event `globalcache_itach_ir_learned`) |
-| `receiveIR` | `globalcache_itach.receive_ir` (+ bus event `globalcache_itach_ir_received` when unsolicited `sendir`/`IR` lines arrive) |
+| `get_IRL` / `stop_IRL` | **Configure → Learn IR command (pinhole)**; also `ir_learner_start` / `ir_learner_stop` (+ bus event `globalcache_itach_ir_learned`) |
+| `receiveIR` | `globalcache_itach.receive_ir` (+ bus event `globalcache_itach_ir_received`); enabling an **`infrared` receiver** entity also sets RECEIVER mode + `receiveIR` |
 | `getdevices`, `getversion`, `get_NET` | Coordinator refresh, **Gateway diagnostics** sensor (off by default), diagnostics download, and `get_devices` / `get_version` / `get_net` services |
 | Arbitrary ASCII line | `globalcache_itach.send_raw` or **`send_command`** (same behaviour; collects lines for `collect_seconds`) |
 | `setstate` / `getstate` | **Configure → Add relay** → `switch` entities; services `set_relay`, `get_relay`, `pulse_relay` |
@@ -168,7 +178,8 @@ Protocol reference: [iTach API (PDF)](https://www.globalcache.com/files/docs/API
 - One **serialized** TCP client per config entry with **connect retries** and **EOF recovery** so the next command opens a new session. Multiple Home Assistant instances or other controllers talking to the same iTach can still contend on port **4998**.
 - **Relay** and **serial** connectors are configured in **integration options** (like remotes). Serial payloads use the Unified TCP data socket (**control port + module**, e.g. 4999 for module 1 when control is 4998). Confirm module/port wiring on your SKU (IP2CC relays are often module **3**; **GC-100-12** relays are module **3**, IR emitters modules **4** and **5** — run `get_devices` or check diagnostics).
 - **GC-100** allows only **one** TCP client on port **4998** at a time; avoid iHelp/other tools holding that port while Home Assistant is connected.
-- **IR learner** output is exposed via events and logs; it does not replace Global Caché’s **iLearn** utility for every workflow.
+- **IR learner** — use **Configure → Learn IR command (pinhole)** to capture a `sendir` line and append it to a remote as a **button** (`full_sendir`). Services `ir_learner_start` / `ir_learner_stop` and bus events remain for automations; Global Caché’s **iLearn** utility is still useful for advanced editing.
+- **`infrared` receivers** are only created when a connector is in **`RECEIVER`** mode (`get_IR`). An IP2IR’s three jacks are emitters by default (`IR` / `IR_BLASTER`); the **onboard learner** (pinhole / `get_IRL`) is separate and is not a room IR receiver entity.
 - Removing a remote, relay, or serial port from options **deletes** its entities from the registry on reload (they are not left as orphaned grey entities).
 
 ## Development
@@ -178,11 +189,11 @@ pip install pytest pytest-asyncio voluptuous
 pytest tests/
 ```
 
-The test suite (32 tests) exercises **Pronto parsing**, **device/entity helpers**, **serial sessions**, and the **async TCP client** against a fake iTach server (no Home Assistant install required for those tests).
+The test suite exercises **Pronto parsing**, **infrared timing conversion**, **device/entity helpers**, **serial sessions**, and the **async TCP client** against a fake iTach server (no Home Assistant install required for those tests).
 
 ### Refreshing README screenshots
 
-With the Docker dev instance running (`docker compose up -d`):
+With the Docker dev instance running (`docker compose up -d` → UI on [http://localhost:8124](http://localhost:8124)):
 
 ```bash
 pip install playwright requests pyyaml
@@ -191,7 +202,7 @@ export HA_REFRESH_TOKEN="<refresh token from your dev HA>"
 python3 scripts/capture_screenshots.py
 ```
 
-Screenshots are defined in [`docs/screenshot-manifest.yaml`](docs/screenshot-manifest.yaml) and written to [`docs/images/`](docs/images/). The script uses the personal Cursor skill **`ha-integration-screenshots`** (`~/.cursor/skills/ha-integration-screenshots/`). List device IDs with `--discover-devices` when updating the manifest.
+Use a refresh token whose `client_id` matches `ha_url` in [`docs/screenshot-manifest.yaml`](docs/screenshot-manifest.yaml) (this repo uses `http://127.0.0.1:8124`). Screenshots land in [`docs/images/`](docs/images/). The script uses the personal Cursor skill **`ha-integration-screenshots`**. List device IDs with `--discover-devices` when updating the manifest (e.g. after adding LG Infrared or a GC-100).
 
 Contributor handoff notes: [`CONTEXT.md`](CONTEXT.md).
 

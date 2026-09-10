@@ -29,6 +29,7 @@ from .const import (
     ATTR_RESPONSE_LINES,
     CONF_COMMAND_TIMEOUT,
     CONF_CONNECT_TIMEOUT,
+    CONF_DEVICE_MODULES,
     CONF_HOST as CONF_GCI_HOST,
     CONF_PORT as CONF_GCI_PORT,
     DOMAIN,
@@ -67,6 +68,7 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[str] = [
     "binary_sensor",
     "button",
+    "infrared",
     "sensor",
     "switch",
     "text",
@@ -98,6 +100,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_start_serial_listeners()
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
+    # Older entries may lack structured device_modules; refresh before platforms load
+    # so infrared emitters cover every IR jack from getdevices.
+    entry = await _async_ensure_device_modules(hass, entry, coordinator)
+
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
@@ -113,6 +119,44 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     _register_services(hass)
     return True
+
+
+async def _async_ensure_device_modules(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: Any,
+) -> ConfigEntry:
+    """Populate ``device_modules`` (and fix model) when missing on older entries."""
+    from .client import ItachError
+    from .device_util import infer_product_label, parse_getdevices_lines
+
+    existing = entry.data.get(CONF_DEVICE_MODULES)
+    if isinstance(existing, list) and existing:
+        return entry
+    try:
+        lines = await coordinator.client.getdevices()
+    except (TimeoutError, OSError, ItachError) as err:
+        _LOGGER.warning(
+            "Could not refresh device_modules for %s: %s", entry.title, err
+        )
+        return entry
+    modules = parse_getdevices_lines(lines)
+    if not modules:
+        return entry
+    fw = str(entry.data.get("firmware") or "")
+    model = infer_product_label(modules, fw)
+    new_data = {
+        **entry.data,
+        CONF_DEVICE_MODULES: modules,
+        "model": model,
+    }
+    hass.config_entries.async_update_entry(entry, data=new_data)
+    _LOGGER.info(
+        "Stored device_modules for %s (%s IR connector(s))",
+        entry.title,
+        sum(1 for m in modules if "IR" in str(m.get("type", ""))),
+    )
+    return entry
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -291,6 +335,7 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def _learner_start(call: ServiceCall) -> None:
         coord = _coordinator_for_service(hass, call)
+        coord.enable_ir_receive_events()
         lines = await coord.client.send_raw(
             "get_IRL",
             end_on=lambda l: "learner" in l.lower() or "disabled" in l.lower(),

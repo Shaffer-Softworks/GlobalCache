@@ -97,3 +97,16 @@ def parse_serial_commands_json(
     except ValueError as err:
         return None, str(err)
     return commands, None
+
+
+def rewrite_sendir_connector(sendir_line: str, module: int, port: int) -> str:
+    """Replace module:port in a ``sendir,...`` line (learner always reports 1:1)."""
+    text = sendir_line.strip()
+    if not text.lower().startswith("sendir,"):
+        msg = "Expected a sendir line"
+        raise ValueError(msg)
+    parts = text.split(",", 2)
+    if len(parts) < 3:
+        msg = "Malformed sendir line"
+        raise ValueError(msg)
+    return f"sendir,{int(module)}:{int(port)},{parts[2]}"
