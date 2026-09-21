@@ -134,14 +134,20 @@ cannot import name 'DhcpServiceInfo' from 'homeassistant.components.dhcp'
 
 Config entry shows **`setup_error` / Import error**. Deploy manifest **1.0.2+** (or cherry-pick the one-line import change in `config_flow.py`), then restart HA or reload the integration.
 
-## Production / deployment snapshot (2026-07-31)
+## Production / deployment snapshot (2026-09-21)
 
 | Environment | Integration version | Status |
 |-------------|---------------------|--------|
 | **HACS default** | Search **Global Caché iTach** / **GlobalCache** | Added via [hacs/default#8063](https://github.com/hacs/default/pull/8063) |
-| **Latest release** | **v1.0.3** | https://github.com/Shaffer-Softworks/GlobalCache/releases |
+| **Latest release** | **v1.1.3** | https://github.com/Shaffer-Softworks/GlobalCache/releases/tag/v1.1.3 |
 
 Install via HACS (default feed) preferred; custom-repository install is no longer needed.
+
+### v1.1.3 release notes (summary)
+
+- **IP2CC config validation** — accept bare `getversion` firmware replies ([#17](https://github.com/Shaffer-Softworks/GlobalCache/issues/17))
+- **iTach RECEIVER probe** — skip on non–Global Connect so IP2IR / WF2IR stop logging spurious reload warnings ([#18](https://github.com/Shaffer-Softworks/GlobalCache/issues/18))
+- **`via_device_id`** — replace deprecated `via_device` for HA 2027.8 ([#19](https://github.com/Shaffer-Softworks/GlobalCache/issues/19))
 
 ## Optional follow-ups (not implemented)
 
@@ -149,4 +155,4 @@ Install via HACS (default feed) preferred; custom-repository install is no longe
 
 ---
 
-*Last updated: 2026-09-20 — bare getversion / IP2CC config validation (#17).*
+*Last updated: 2026-09-21 — curated v1.1.3 release notes (#17, #18, #19).*
