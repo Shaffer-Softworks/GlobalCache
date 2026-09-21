@@ -109,7 +109,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry = await _async_ensure_device_modules(hass, entry, coordinator)
 
     device_registry = dr.async_get(hass)
-    device_registry.async_get_or_create(
+    gateway = device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, entry.entry_id)},
         name=entry.title,
@@ -117,7 +117,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         model=entry.data.get("model") or "iTach",
         sw_version=entry.data.get("firmware") or "",
     )
-    async_register_remote_devices(hass, entry)
+    async_register_remote_devices(hass, entry, via_device_id=gateway.id)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
