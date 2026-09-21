@@ -133,7 +133,7 @@ def _normalize_device_line(raw: str) -> str:
 
 
 def gateway_via_device(entry_id: str) -> tuple[str, str]:
-    """Single identifier tuple for ``via_device`` (not a set)."""
+    """Single identifier tuple for the gateway hub device (not a set)."""
     from .const import DOMAIN
 
     return (DOMAIN, entry_id)
@@ -151,7 +151,9 @@ def remote_device_identifiers(entry_id: str, remote_id: str) -> set[tuple[str, s
     return {(DOMAIN, entry_id, remote_id)}
 
 
-def async_register_remote_devices(hass: HomeAssistant, entry: ConfigEntry) -> None:
+def async_register_remote_devices(
+    hass: HomeAssistant, entry: ConfigEntry, *, via_device_id: str
+) -> None:
     """Create one HA device per configured remote (via the gateway)."""
     from homeassistant.helpers import device_registry as dr
 
@@ -169,7 +171,7 @@ def async_register_remote_devices(hass: HomeAssistant, entry: ConfigEntry) -> No
             name=str(spec.get(CONF_REMOTE_NAME, "Remote")),
             manufacturer=MANUFACTURER,
             model="IR remote",
-            via_device=gateway_via_device(entry_id),
+            via_device_id=via_device_id,
         )
 
 

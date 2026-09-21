@@ -9,6 +9,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -34,7 +35,6 @@ from .const import (
 from .coordinator import ItachCoordinator
 from .device_util import (
     gateway_device_identifiers,
-    gateway_via_device,
     remote_device_identifiers,
 )
 from .entity_registry_util import (
@@ -58,6 +58,9 @@ async def async_setup_entry(
         entry
     )
     async_remove_stale_entities(hass, entry, "button", active)
+    via_device_id = dr.async_get_device_id_by_identifier(
+        hass, (DOMAIN, entry.entry_id), config_entry_id=entry.entry_id
+    )
     entities: list[ButtonEntity] = []
     for spec in entry.options.get(CONF_REMOTES, []):
         remote_id = str(spec.get(CONF_REMOTE_ID, "")).strip()
@@ -82,6 +85,7 @@ async def async_setup_entry(
                     base_repeat,
                     name,
                     cmd,
+                    via_device_id,
                 )
             )
     for spec in entry.options.get(CONF_SERIAL_PORTS, []):
@@ -126,6 +130,7 @@ class ItachRemoteCommandButton(CoordinatorEntity[ItachCoordinator], ButtonEntity
         base_repeat: int,
         command_name: str,
         cmd: dict[str, Any],
+        via_device_id: str,
     ) -> None:
         super().__init__(coordinator)
         self._spec = spec
@@ -143,7 +148,7 @@ class ItachRemoteCommandButton(CoordinatorEntity[ItachCoordinator], ButtonEntity
             "name": str(spec.get(CONF_REMOTE_NAME, "Remote")),
             "manufacturer": MANUFACTURER,
             "model": "IR remote",
-            "via_device": gateway_via_device(entry.entry_id),
+            "via_device_id": via_device_id,
         }
 
     async def async_press(self) -> None:
