@@ -88,6 +88,72 @@ async def stale_ir_server() -> tuple[str, int, list[str]]:
     await server.wait_closed()
 
 
+@pytest.fixture
+async def bare_fw_server() -> tuple[str, int]:
+    """IP2CC-style getversion reply: bare firmware, no version, prefix."""
+
+    async def handler(
+        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        try:
+            while True:
+                raw = await reader.readuntil(b"\r")
+                cmd = raw.decode("ascii", errors="replace").strip().lower()
+                if cmd == "getdevices":
+                    writer.write(
+                        b"device,0,0 ETHERNET\rdevice,1,3 RELAY\rendlistdevices\r"
+                    )
+                elif cmd == "getversion,0":
+                    writer.write(b"710-1008-05\r")
+                else:
+                    writer.write(b"unknowncommand,INVALID\r")
+                await writer.drain()
+        except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
+            pass
+        finally:
+            writer.close()
+
+    server = await asyncio.start_server(handler, "127.0.0.1", 0)
+    sockets = server.sockets
+    assert sockets
+    port = sockets[0].getsockname()[1]
+    yield "127.0.0.1", port
+    server.close()
+    await server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_getversion_accepts_bare_firmware(
+    bare_fw_server: tuple[str, int],
+) -> None:
+    from custom_components.globalcache_itach.device_util import (
+        firmware_from_getversion_lines,
+        is_getversion_reply,
+    )
+
+    host, port = bare_fw_server
+    client = ItachClient(host, port, connect_timeout=2.0, command_timeout=2.0)
+    async with client:
+        lines = await client.getversion("0")
+        via_end_on = await client.send_raw(
+            "getversion,0",
+            end_on=is_getversion_reply,
+            timeout=2.0,
+        )
+    assert lines == ["710-1008-05"]
+    assert via_end_on == ["710-1008-05"]
+    assert firmware_from_getversion_lines(lines) == "710-1008-05"
+
+
+@pytest.mark.asyncio
+async def test_getversion_prefixed(fake_server: tuple[str, int]) -> None:
+    host, port = fake_server
+    client = ItachClient(host, port, connect_timeout=2.0, command_timeout=2.0)
+    async with client:
+        lines = await client.getversion("0")
+    assert lines == ["version,0,TESTFW"]
+
+
 @pytest.mark.asyncio
 async def test_getdevices(fake_server: tuple[str, int]) -> None:
     host, port = fake_server

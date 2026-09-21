@@ -23,8 +23,10 @@ from .command_util import (
 )
 from .device_util import (
     default_ir_module,
+    firmware_from_getversion_lines,
     infer_product_label,
     ir_connectors_hint,
+    is_getversion_reply,
     parse_getdevices_lines,
     prefer_discovery_model,
 )
@@ -123,15 +125,10 @@ async def _validate_connection(hass: HomeAssistant, data: dict[str, Any]) -> dic
         device_modules = parse_getdevices_lines(lines)
         ver_lines = await client.send_raw(
             "getversion,0",
-            end_on=lambda x: x.strip().lower().startswith("version,")
-            or x.strip().lower().startswith("unknowncommand"),
+            end_on=is_getversion_reply,
             timeout=10.0,
         )
-        fw = ""
-        for ln in ver_lines:
-            if ln.strip().lower().startswith("version,"):
-                fw = ln.strip()
-                break
+        fw = firmware_from_getversion_lines(ver_lines)
         model = infer_product_label(device_modules, fw)
     except (TimeoutError, OSError, ItachError) as err:
         _LOGGER.warning("iTach validation failed: %s", err)

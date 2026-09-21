@@ -22,6 +22,38 @@ _UNKNOWN_HINTS: dict[str, str] = {
 }
 
 _UNKNOWN_RE = re.compile(r"^unknowncommand,?\s*(\d+)?", re.IGNORECASE)
+# Legacy getversion (no module) and some IP2CC firmwares reply with bare fw only.
+_BARE_FIRMWARE_RE = re.compile(r"^\d{3}-\d{4}-\d{2}\b")
+
+
+def is_bare_firmware_line(line: str) -> bool:
+    """True for replies like ``710-1008-05`` (no ``version,`` prefix)."""
+    return _BARE_FIRMWARE_RE.match(line.strip()) is not None
+
+
+def is_getversion_reply(line: str) -> bool:
+    """True when a line completes a getversion exchange.
+
+    Accepts ``version,...``, ``unknowncommand...``, or bare firmware
+    (IP2CC / legacy Unified TCP).
+    """
+    text = line.strip()
+    lower = text.lower()
+    if lower.startswith("version,") or lower.startswith("unknowncommand"):
+        return True
+    return is_bare_firmware_line(text)
+
+
+def firmware_from_getversion_lines(lines: list[str]) -> str:
+    """Prefer a ``version,`` line; else the first bare firmware string."""
+    bare = ""
+    for ln in lines:
+        text = ln.strip()
+        if text.lower().startswith("version,"):
+            return text
+        if not bare and is_bare_firmware_line(text):
+            bare = text
+    return bare
 
 
 def parse_getdevices_lines(lines: list[str]) -> list[dict[str, Any]]:
@@ -56,6 +88,10 @@ def infer_product_label(modules: list[dict[str, Any]], firmware: str) -> str:
     for m in modules:
         if "IP2IR" in m["type"] or m["type"] == "IR":
             return "iTach IP2IR"
+    if any("RELAY" in t for t in types) and not any(
+        "IR" in t or "SERIAL" in t for t in types
+    ):
+        return "iTach IP2CC"
     return "iTach"
 
 
