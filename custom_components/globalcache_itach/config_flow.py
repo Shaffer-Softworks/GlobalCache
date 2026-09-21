@@ -35,6 +35,7 @@ from .discovery import (
     async_scan_beacons,
     normalize_unique_id,
 )
+from .options_menu import build_options_init_menu
 from .const import (
     _LEGACY_SERIAL_LISTEN,
     CONF_CMD_DATA,
@@ -507,6 +508,18 @@ def _default_options() -> dict[str, Any]:
     }
 
 
+def _learn_timeout_selector() -> selector.NumberSelector:
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            mode=selector.NumberSelectorMode.BOX,
+            min=5,
+            max=120,
+            step=1,
+            unit_of_measurement="s",
+        )
+    )
+
+
 class GlobalCacheItachOptionsFlow(OptionsFlow):
     """Options and remote/command editor."""
 
@@ -565,30 +578,10 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
         opts = self._opts()
         remotes: list[dict[str, Any]] = list(opts.get(CONF_REMOTES, []))
         relays: list[dict[str, Any]] = list(opts.get(CONF_RELAYS, []))
-        menu = {
-            "ir_defaults": "IR defaults",
-            "timeouts": "Timeouts",
-            "add_remote": "Add remote",
-            "edit_remote": "Edit remote",
-            "remove_remote": "Remove remote",
-            "learn_ir": "Learn IR command (pinhole)",
-            "add_relay": "Add relay",
-            "edit_relay": "Edit relay",
-            "remove_relay": "Remove relay",
-            "add_serial": "Add serial port",
-            "edit_serial": "Edit serial port",
-            "remove_serial": "Remove serial port",
-        }
-        if not remotes:
-            menu.pop("edit_remote", None)
-            menu.pop("learn_ir", None)
-        if not relays:
-            menu.pop("edit_relay", None)
-            menu.pop("remove_relay", None)
         serials: list[dict[str, Any]] = list(opts.get(CONF_SERIAL_PORTS, []))
-        if not serials:
-            menu.pop("edit_serial", None)
-            menu.pop("remove_serial", None)
+        menu = build_options_init_menu(
+            remotes=remotes, relays=relays, serials=serials
+        )
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({vol.Required("next"): vol.In(menu)}),
@@ -865,60 +858,110 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
     async def async_step_learn_ir(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Pick remote and command name, then capture from the pinhole learner."""
+        """Pick remote (or create one) and command name, then capture from pinhole."""
         opts = self._opts()
         remotes: list[dict[str, Any]] = list(opts.get(CONF_REMOTES, []))
+        entry = self._options_entry()
+        modules = list(entry.data.get(CONF_DEVICE_MODULES, []))
+        default_module = default_ir_module(modules) if modules else 1
+
         if not remotes:
-            return self.async_abort(reason="no_remotes")
+            return await self._async_step_learn_ir_new_remote(
+                user_input, default_module=default_module, modules=modules
+            )
+
         choices = {
             str(r[CONF_REMOTE_ID]): str(r.get(CONF_REMOTE_NAME, r[CONF_REMOTE_ID]))
             for r in remotes
             if r.get(CONF_REMOTE_ID)
         }
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_REMOTE_ID): vol.In(choices),
+                vol.Required(CONF_CMD_NAME, default="power"): str,
+                vol.Required("timeout", default=30): _learn_timeout_selector(),
+            }
+        )
+        placeholders = {"ir_hint": ir_connectors_hint(modules) or " "}
         if user_input is not None:
+            cmd_name = str(user_input[CONF_CMD_NAME]).strip()
             self._learn_draft = {
                 CONF_REMOTE_ID: str(user_input[CONF_REMOTE_ID]),
-                CONF_CMD_NAME: str(user_input[CONF_CMD_NAME]).strip(),
+                CONF_CMD_NAME: cmd_name,
                 "timeout": float(user_input.get("timeout", 30)),
             }
-            if not self._learn_draft[CONF_CMD_NAME]:
+            if not cmd_name:
                 return self.async_show_form(
                     step_id="learn_ir",
-                    data_schema=vol.Schema(
-                        {
-                            vol.Required(CONF_REMOTE_ID): vol.In(choices),
-                            vol.Required(CONF_CMD_NAME): str,
-                            vol.Required("timeout", default=30): selector.NumberSelector(
-                                selector.NumberSelectorConfig(
-                                    mode=selector.NumberSelectorMode.BOX,
-                                    min=5,
-                                    max=120,
-                                    step=1,
-                                    unit_of_measurement="s",
-                                )
-                            ),
-                        }
-                    ),
+                    data_schema=schema,
                     errors={"base": "command_name_required"},
+                    description_placeholders=placeholders,
                 )
             return await self.async_step_learn_ir_capture()
         return self.async_show_form(
             step_id="learn_ir",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_REMOTE_ID): vol.In(choices),
-                    vol.Required(CONF_CMD_NAME, default="power"): str,
-                    vol.Required("timeout", default=30): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            mode=selector.NumberSelectorMode.BOX,
-                            min=5,
-                            max=120,
-                            step=1,
-                            unit_of_measurement="s",
-                        )
-                    ),
-                }
-            ),
+            data_schema=schema,
+            description_placeholders=placeholders,
+        )
+
+    async def _async_step_learn_ir_new_remote(
+        self,
+        user_input: dict[str, Any] | None,
+        *,
+        default_module: int,
+        modules: list[Any],
+    ) -> FlowResult:
+        """Learn IR when no remotes exist: create remote + command in one flow."""
+        # CONF_REMOTE_NAME and CONF_CMD_NAME are both "name" in options storage;
+        # use a distinct form key for the remote label on this combined step.
+        schema = vol.Schema(
+            {
+                vol.Required("remote_name", default="Remote"): str,
+                vol.Required(
+                    CONF_MODULE, default=default_module
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        mode=selector.NumberSelectorMode.BOX,
+                        min=1,
+                        max=5,
+                    )
+                ),
+                vol.Required(CONF_CONN_PORT, default=1): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        mode=selector.NumberSelectorMode.BOX,
+                        min=1,
+                        max=6,
+                    )
+                ),
+                vol.Required(CONF_CMD_NAME, default="power"): str,
+                vol.Required("timeout", default=30): _learn_timeout_selector(),
+            }
+        )
+        placeholders = {"ir_hint": ir_connectors_hint(modules) or " "}
+        if user_input is not None:
+            remote_name = str(user_input.get("remote_name", "")).strip() or "Remote"
+            cmd_name = str(user_input[CONF_CMD_NAME]).strip()
+            self._learn_draft = {
+                "create_remote": True,
+                CONF_REMOTE_NAME: remote_name,
+                CONF_MODULE: int(user_input[CONF_MODULE]),
+                CONF_CONN_PORT: int(user_input[CONF_CONN_PORT]),
+                CONF_IR_COUNT: 1,
+                CONF_CMD_NAME: cmd_name,
+                "timeout": float(user_input.get("timeout", 30)),
+            }
+            if not cmd_name:
+                return self.async_show_form(
+                    step_id="learn_ir",
+                    data_schema=schema,
+                    errors={"base": "command_name_required"},
+                    description_placeholders=placeholders,
+                )
+            return await self.async_step_learn_ir_capture()
+        return self.async_show_form(
+            step_id="learn_ir",
+            data_schema=schema,
+            description_placeholders=placeholders,
         )
 
     async def async_step_learn_ir_capture(
@@ -960,17 +1003,10 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
                 if raw_line is not None and not errors:
                     opts = self._opts()
                     remotes = list(opts.get(CONF_REMOTES, []))
-                    rid = str(draft[CONF_REMOTE_ID])
                     name = command
-                    updated: list[dict[str, Any]] = []
-                    found = False
-                    for remote in remotes:
-                        if str(remote.get(CONF_REMOTE_ID)) != rid:
-                            updated.append(remote)
-                            continue
-                        found = True
-                        module = int(remote[CONF_MODULE])
-                        port = int(remote[CONF_CONN_PORT])
+                    if draft.get("create_remote"):
+                        module = int(draft[CONF_MODULE])
+                        port = int(draft[CONF_CONN_PORT])
                         try:
                             sendir = rewrite_sendir_connector(
                                 raw_line, module, port
@@ -978,31 +1014,73 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
                         except ValueError as err:
                             errors["base"] = "learn_failed"
                             draft["error_detail"] = str(err)
-                            updated.append(remote)
-                            continue
-                        commands = [
-                            c
-                            for c in list(remote.get(CONF_COMMANDS, []))
-                            if str(c.get(CONF_CMD_NAME, "")).strip().lower()
-                            != name.lower()
-                        ]
-                        commands.append(
-                            {
-                                CONF_CMD_NAME: name,
-                                CONF_CMD_FORMAT: "full_sendir",
-                                CONF_CMD_DATA: sendir,
-                            }
-                        )
-                        updated.append({**remote, CONF_COMMANDS: commands})
-                    if not errors and not found:
-                        errors["base"] = "learn_failed"
-                        draft["error_detail"] = "Remote not found"
-                    elif not errors:
-                        self._learn_draft = None
-                        return self.async_create_entry(
-                            title="",
-                            data={**opts, CONF_REMOTES: updated},
-                        )
+                        else:
+                            remotes.append(
+                                {
+                                    CONF_REMOTE_ID: str(uuid.uuid4()),
+                                    CONF_REMOTE_NAME: str(
+                                        draft.get(CONF_REMOTE_NAME, "Remote")
+                                    ),
+                                    CONF_MODULE: module,
+                                    CONF_CONN_PORT: port,
+                                    CONF_IR_COUNT: int(draft.get(CONF_IR_COUNT, 1)),
+                                    CONF_COMMANDS: [
+                                        {
+                                            CONF_CMD_NAME: name,
+                                            CONF_CMD_FORMAT: "full_sendir",
+                                            CONF_CMD_DATA: sendir,
+                                        }
+                                    ],
+                                }
+                            )
+                            self._learn_draft = None
+                            return self.async_create_entry(
+                                title="",
+                                data={**opts, CONF_REMOTES: remotes},
+                            )
+                    else:
+                        rid = str(draft[CONF_REMOTE_ID])
+                        updated: list[dict[str, Any]] = []
+                        found = False
+                        for remote in remotes:
+                            if str(remote.get(CONF_REMOTE_ID)) != rid:
+                                updated.append(remote)
+                                continue
+                            found = True
+                            module = int(remote[CONF_MODULE])
+                            port = int(remote[CONF_CONN_PORT])
+                            try:
+                                sendir = rewrite_sendir_connector(
+                                    raw_line, module, port
+                                )
+                            except ValueError as err:
+                                errors["base"] = "learn_failed"
+                                draft["error_detail"] = str(err)
+                                updated.append(remote)
+                                continue
+                            commands = [
+                                c
+                                for c in list(remote.get(CONF_COMMANDS, []))
+                                if str(c.get(CONF_CMD_NAME, "")).strip().lower()
+                                != name.lower()
+                            ]
+                            commands.append(
+                                {
+                                    CONF_CMD_NAME: name,
+                                    CONF_CMD_FORMAT: "full_sendir",
+                                    CONF_CMD_DATA: sendir,
+                                }
+                            )
+                            updated.append({**remote, CONF_COMMANDS: commands})
+                        if not errors and not found:
+                            errors["base"] = "learn_failed"
+                            draft["error_detail"] = "Remote not found"
+                        elif not errors:
+                            self._learn_draft = None
+                            return self.async_create_entry(
+                                title="",
+                                data={**opts, CONF_REMOTES: updated},
+                            )
 
         detail = str(draft.get("error_detail") or "")
         return self.async_show_form(

@@ -82,11 +82,14 @@
       },
       "learn_ir": {
         "title": "Learn IR command",
-        "description": "Capture a code with the iTach pinhole learner and add it to a remote as a button.",
+        "description": "Capture a code with the iTach pinhole learner and add it to a remote as a button. If you have no remotes yet, enter a name and IR connector here to create one. {ir_hint}",
         "data": {
           "remote_id": "Remote",
+          "remote_name": "New remote name",
           "name": "Command name",
-          "timeout": "Listen timeout"
+          "timeout": "Listen timeout",
+          "module": "Module address",
+          "port": "Port (1–3 on IP2IR)"
         }
       },
       "learn_ir_capture": {

@@ -98,10 +98,21 @@ Open **Configure** on the integration card (gear icon on older layouts):
 | **IR defaults** | Carrier frequency, repeat, offset, sendir ID policy (auto-increment vs fixed). |
 | **Timeouts** | Connect and command timeouts. |
 | **Add remote** | Name, module/port (e.g. module `1`, port `2` → connector **1:2**), repeat multiplier, **JSON command list**. |
-| **Learn IR command (pinhole)** | Pick a remote and command name → Submit → aim the handheld at the iTach **pinhole** within the timeout. Saves a **`full_sendir`** button (rewrites connector to the remote’s module:port). Same name replaces an existing command. |
-| **Edit remote** / **Remove remote** | Change or delete a configured remote (entity IDs stay stable on edit). |
+| **Learn IR command (pinhole)** | Always available in Configure. Pick an existing remote (or enter a name + IR connector to create one) and a command name → Submit → aim the handheld at the iTach **pinhole** within the timeout. Saves a **`full_sendir`** button (rewrites connector to the remote’s module:port). Same name replaces an existing command. |
+| **Edit remote** / **Remove remote** | Change or delete a configured remote (entity IDs stay stable on edit). Shown only when at least one remote exists. |
 | **Add relay** / **Edit relay** / **Remove relay** | Relay `switch` entities via `setstate` / `getstate`. |
 | **Add serial port** / **Edit serial** / **Remove serial** | Serial `text` entity, optional preset **buttons**, **Last received** sensor. |
+
+#### Learn IR (pinhole)
+
+iTach / GC-100 / Flex do **not** expose room IR receive (`RECEIVER`). Use **Configure → Learn IR command (pinhole)** (`get_IRL` / `stop_IRL`) instead:
+
+1. Open **Configure** on the hub (Learn IR is always in the Action list, even with no remotes yet).
+2. If you already have remotes: pick one, enter a command name and timeout.
+3. If you have none: enter a new remote name, IR module/port, command name, and timeout — the first successful capture creates that remote.
+4. Submit on the capture step, then hold the handheld remote 1–2 inches from the iTach **pinhole** and press one button within the timeout.
+
+The learned line is stored as a **`full_sendir`** command button (connector rewritten to the remote’s module:port). Automations can also use services `ir_learner_start` / `ir_learner_stop` and the bus event `globalcache_itach_ir_learned`.
 
 ### Devices and entities
 
@@ -178,7 +189,7 @@ Protocol reference: [iTach API (PDF)](https://www.globalcache.com/files/docs/API
 - One **serialized** TCP client per config entry with **connect retries** and **EOF recovery** so the next command opens a new session. Multiple Home Assistant instances or other controllers talking to the same iTach can still contend on port **4998**.
 - **Relay** and **serial** connectors are configured in **integration options** (like remotes). Serial payloads use the Unified TCP data socket (**control port + module**, e.g. 4999 for module 1 when control is 4998). Confirm module/port wiring on your SKU (IP2CC relays are often module **3**; **GC-100-12** relays are module **3**, IR emitters modules **4** and **5** — run `get_devices` or check diagnostics).
 - **GC-100** allows only **one** TCP client on port **4998** at a time; avoid iHelp/other tools holding that port while Home Assistant is connected.
-- **IR learner** — use **Configure → Learn IR command (pinhole)** to capture a `sendir` line and append it to a remote as a **button** (`full_sendir`). Services `ir_learner_start` / `ir_learner_stop` and bus events remain for automations; Global Caché’s **iLearn** utility is still useful for advanced editing.
+- **IR learner** — use **Configure → Learn IR command (pinhole)** (always listed, even with no remotes yet) to capture a `sendir` line and append it to a remote as a **button** (`full_sendir`). With no remotes, the same flow creates one. Services `ir_learner_start` / `ir_learner_stop` and bus events remain for automations; Global Caché’s **iLearn** utility is still useful for advanced editing.
 - **`infrared` receivers** / `set_IR RECEIVER` / `receiveIR` are **Global Connect only** (Unified TCP API). On iTach/GC-100/Flex the integration does not probe for RECEIVER or create receiver entities; use emitters plus the **pinhole learner** (`get_IRL`). Raw `set_ir` / `receive_ir` services remain for advanced use but `RECEIVER` is invalid on non–Global Connect hardware.
 - Removing a remote, relay, or serial port from options **deletes** its entities from the registry on reload (they are not left as orphaned grey entities).
 
