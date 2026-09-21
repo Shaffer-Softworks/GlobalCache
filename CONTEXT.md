@@ -70,7 +70,7 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 
 2. **Options flow menus** — some steps use **`vol.In({...})`** instead of **`SelectSelector`** for broader HA compatibility.
 
-3. **Translations** — `options.step.remote_commands` needs **`description`** + **`{hint}`** placeholder. **`options.step.init.data.next`** in `strings.json`. IR/serial command JSON uses **`TextSelector(multiline=True)`** (textarea), not a single-line field. Learn IR uses **`learn_ir`** / **`learn_ir_capture`** with placeholders `{timeout}`, `{command}`, `{detail}`.
+3. **Translations** — `options.step.remote_commands` needs **`description`** + **`{hint}`** placeholder. **`options.step.init.data.next`** in `strings.json`. IR/serial command JSON uses **`TextSelector(multiline=True)`** (textarea), not a single-line field. Learn IR uses **`learn_ir`** / **`learn_ir_capture`** with placeholders `{timeout}`, `{command}`, `{detail}`, and **`{ir_hint}`** on `learn_ir` (always pass a non-empty placeholder so HA does not show the raw token). When creating a remote mid-learn, the form key is **`remote_name`** (not `name`) because `CONF_REMOTE_NAME` and `CONF_CMD_NAME` both serialize as `"name"`.
 
 4. **Do not use `listen` as a config-flow field key** — Home Assistant does not apply `options.step.*.data.listen` labels; UI shows raw `listen`. Use **`monitor_incoming`** with label *Monitor incoming data (persistent connection)* (plain **`bool`**, same as `append_cr`).
 
@@ -92,7 +92,7 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 
 13. **Git / releases** — semver bumps via [`.github/workflows/release.yml`](.github/workflows/release.yml) (workflow_dispatch). Each release attaches **`globalcache_itach.zip`** (integration files at zip root) for HACS `zip_release` download counting; [`hacs.json`](hacs.json) sets `zip_release` + `filename`. `WORKFLOW_TRIGGER_TOKEN` enables automated manifest-bump PRs; without it, open the compare URL from the workflow summary. **Do not** add `Co-authored-by: Cursor` to commits; history was rewritten (2026-06-05) to remove it from `main` and retag `v1.0.0`.
 
-14. **Pinhole Learn IR** — Options **Learn IR command (pinhole)** calls `get_IRL`, waits for one `sendir` line, `stop_IRL`, then stores `full_sendir` on the chosen remote via `rewrite_sendir_connector` (learner always reports `1:1`).
+14. **Pinhole Learn IR** — Options menu is built by [`options_menu.build_options_init_menu`](custom_components/globalcache_itach/options_menu.py). **Learn IR command (pinhole)** is **always** listed (even with zero remotes); edit/remove remote/relay/serial entries are omitted when their lists are empty. Flow: `get_IRL` → wait for one `sendir` → `stop_IRL` → store `full_sendir` via `rewrite_sendir_connector` (learner always reports `1:1`). With no remotes, `async_step_learn_ir` collects remote name + module/port and creates the remote on successful capture.
 
 15. **Infrared timing padding** — `infrared-protocols` NEC (and similar) frames end on a mark with no trailing space. `us_timings_to_gc_pairs` pads with a **~40 ms** off pulse (not the ~80 µs GC minimum), otherwise LG Infrared / other consumers fail to decode on the TV.
 ## Documentation
@@ -134,14 +134,20 @@ cannot import name 'DhcpServiceInfo' from 'homeassistant.components.dhcp'
 
 Config entry shows **`setup_error` / Import error**. Deploy manifest **1.0.2+** (or cherry-pick the one-line import change in `config_flow.py`), then restart HA or reload the integration.
 
-## Production / deployment snapshot (2026-07-31)
+## Production / deployment snapshot (2026-09-21)
 
 | Environment | Integration version | Status |
 |-------------|---------------------|--------|
 | **HACS default** | Search **Global Caché iTach** / **GlobalCache** | Added via [hacs/default#8063](https://github.com/hacs/default/pull/8063) |
-| **Latest release** | **v1.0.3** | https://github.com/Shaffer-Softworks/GlobalCache/releases |
+| **Latest release** | **v1.1.3** | https://github.com/Shaffer-Softworks/GlobalCache/releases/tag/v1.1.3 |
 
 Install via HACS (default feed) preferred; custom-repository install is no longer needed.
+
+### v1.1.3 release notes (summary)
+
+- **IP2CC config validation** — accept bare `getversion` firmware replies ([#17](https://github.com/Shaffer-Softworks/GlobalCache/issues/17))
+- **iTach RECEIVER probe** — skip on non–Global Connect so IP2IR / WF2IR stop logging spurious reload warnings ([#18](https://github.com/Shaffer-Softworks/GlobalCache/issues/18))
+- **`via_device_id`** — replace deprecated `via_device` for HA 2027.8 ([#19](https://github.com/Shaffer-Softworks/GlobalCache/issues/19))
 
 ## Optional follow-ups (not implemented)
 
@@ -149,4 +155,4 @@ Install via HACS (default feed) preferred; custom-repository install is no longe
 
 ---
 
-*Last updated: 2026-09-20 — bare getversion / IP2CC config validation (#17).*
+*Last updated: 2026-09-21 — Learn IR always visible in Configure; CONTEXT production snapshot → v1.1.3.*
