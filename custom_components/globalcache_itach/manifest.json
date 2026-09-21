@@ -1,9 +1,13 @@
 {
   "domain": "globalcache_itach",
   "name": "Global Caché iTach",
-  "codeowners": ["@Shaffer-Softworks"],
+  "codeowners": [
+    "@Shaffer-Softworks"
+  ],
   "config_flow": true,
-  "dependencies": ["infrared"],
+  "dependencies": [
+    "infrared"
+  ],
   "dhcp": [
     {
       "hostname": "globalcache_*",
@@ -15,5 +19,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/Shaffer-Softworks/GlobalCache/issues",
   "requirements": [],
-  "version": "1.1.0"
+  "version": "1.1.3"
 }
