@@ -21,7 +21,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import CONF_DEVICE_MODULES, CONF_REMOTES, DOMAIN, MANUFACTURER
 from .client import ItachError
 from .coordinator import ItachCoordinator
-from .device_util import list_ir_connectors
+from .device_util import list_ir_connectors, supports_ir_receiver
 from .entity_registry_util import (
     infrared_emitter_unique_id,
     infrared_receiver_unique_id,
@@ -51,7 +51,11 @@ async def async_setup_entry(
         remotes=remotes,
         legacy_model=entry.data.get("model"),
     )
-    receiver_ports = await _async_receiver_connectors(coordinator, connectors)
+    # RECEIVER / receiveIR are Global Connect only (Unified TCP API §4.4.1).
+    if supports_ir_receiver(entry.data.get("model")):
+        receiver_ports = await _async_receiver_connectors(coordinator, connectors)
+    else:
+        receiver_ports = []
 
     entities: list[ItachInfraredEmitter | ItachInfraredReceiver] = []
     active_uids: set[str] = set()
@@ -63,7 +67,7 @@ async def async_setup_entry(
         active_uids.add(infrared_receiver_unique_id(entry.entry_id, module, port))
 
     # Drop previously created receivers when ports are not in RECEIVER mode
-    # (IP2IR defaults: IR / IR_BLASTER emitters only + separate onboard learner).
+    # (or when the product does not support RECEIVER — e.g. iTach / GC-100 / Flex).
     async_remove_stale_infrared_entities(hass, entry, active_uids)
     async_add_entities(entities)
 
@@ -97,10 +101,9 @@ async def _async_receiver_connectors(
         if mode == "RECEIVER":
             receivers.append((module, port))
     if not receivers:
-        _LOGGER.warning(
+        _LOGGER.debug(
             "No IR ports in RECEIVER mode on %s "
-            "(IP2IR has 3 emitter jacks + onboard learner; room receive needs "
-            "set_IR RECEIVER on a jack with an IR receiver cable)",
+            "(Global Connect: set_IR RECEIVER on a jack with an IR receiver cable)",
             coordinator.host,
         )
     return receivers

@@ -105,7 +105,7 @@ Open **Configure** on the integration card (gear icon on older layouts):
 
 ### Devices and entities
 
-Each **gateway** is one hub device with diagnostic sensors (**TCP connected**, **Last gateway poll**, **Configured remotes**, optional **Gateway diagnostics**), plus one **`infrared` emitter** (and a disabled-by-default **receiver**) per IR connector discovered via `getdevices`. Each configured **remote** appears as a child device with one **button** per JSON command.
+Each **gateway** is one hub device with diagnostic sensors (**TCP connected**, **Last gateway poll**, **Configured remotes**, optional **Gateway diagnostics**), plus one **`infrared` emitter** per IR connector discovered via `getdevices` (and, on **Global Connect** only, an optional **receiver** when a jack is in `RECEIVER` mode). Each configured **remote** appears as a child device with one **button** per JSON command.
 
 ![Gateway device](docs/images/gateway-device.png)
 
@@ -115,7 +115,7 @@ Each **gateway** is one hub device with diagnostic sensors (**TCP connected**, *
 
 ![LG Infrared using an iTach emitter](docs/images/lg-infrared-device.png)
 
-Receiver entities appear only when a connector is already in **`RECEIVER`** mode (`get_IR`); they stay disabled by default. Enabling a receiver runs `set_IR … RECEIVER` and `receiveIR … enabled` on that jack (do not enable a receiver on a port you still use as a blaster). IP2IR’s three jacks are emitters by default; the **pinhole learner** (`get_IRL`) is separate — use **Configure → Learn IR command (pinhole)** to capture codes onto a remote.
+**Receivers (Global Connect only):** Per the [Unified TCP API](https://www.globalcache.com/files/docs/API-GC-UnifiedTCPv1.1.pdf), `set_IR RECEIVER` and `receiveIR` are supported on **Global Connect** only. Receiver entities are created only on those gateways when a connector is already in **`RECEIVER`** mode (`get_IR`); they stay disabled by default. Enabling a receiver runs `set_IR … RECEIVER` and `receiveIR … enabled` on that jack. **iTach** (IP2IR / WF2IR), **GC-100**, and **Flex** do not support room IR receive — use emitters for TX and **Configure → Learn IR command (pinhole)** (`get_IRL`) to capture codes onto a remote.
 
 **Relays** and **serial ports** attach to the gateway device (GC-100 example with relay switch, serial text, and preset button):
 
@@ -165,7 +165,7 @@ Serial preset JSON uses `name` and `payload` (see options hint text).
 | `set_LED_LIGHTING` / `get_LED_LIGHTING` | `globalcache_itach.set_led_lighting` / `get_led_lighting` |
 | `get_IR` / `set_IR` | `globalcache_itach.get_ir` / `set_ir` |
 | `get_IRL` / `stop_IRL` | **Configure → Learn IR command (pinhole)**; also `ir_learner_start` / `ir_learner_stop` (+ bus event `globalcache_itach_ir_learned`) |
-| `receiveIR` | `globalcache_itach.receive_ir` (+ bus event `globalcache_itach_ir_received`); enabling an **`infrared` receiver** entity also sets RECEIVER mode + `receiveIR` |
+| `receiveIR` | `globalcache_itach.receive_ir` (+ bus event `globalcache_itach_ir_received`); **Global Connect only** — enabling an **`infrared` receiver** entity also sets RECEIVER mode + `receiveIR` |
 | `getdevices`, `getversion`, `get_NET` | Coordinator refresh, **Gateway diagnostics** sensor (off by default), diagnostics download, and `get_devices` / `get_version` / `get_net` services |
 | Arbitrary ASCII line | `globalcache_itach.send_raw` or **`send_command`** (same behaviour; collects lines for `collect_seconds`) |
 | `setstate` / `getstate` | **Configure → Add relay** → `switch` entities; services `set_relay`, `get_relay`, `pulse_relay` |
@@ -179,7 +179,7 @@ Protocol reference: [iTach API (PDF)](https://www.globalcache.com/files/docs/API
 - **Relay** and **serial** connectors are configured in **integration options** (like remotes). Serial payloads use the Unified TCP data socket (**control port + module**, e.g. 4999 for module 1 when control is 4998). Confirm module/port wiring on your SKU (IP2CC relays are often module **3**; **GC-100-12** relays are module **3**, IR emitters modules **4** and **5** — run `get_devices` or check diagnostics).
 - **GC-100** allows only **one** TCP client on port **4998** at a time; avoid iHelp/other tools holding that port while Home Assistant is connected.
 - **IR learner** — use **Configure → Learn IR command (pinhole)** to capture a `sendir` line and append it to a remote as a **button** (`full_sendir`). Services `ir_learner_start` / `ir_learner_stop` and bus events remain for automations; Global Caché’s **iLearn** utility is still useful for advanced editing.
-- **`infrared` receivers** are only created when a connector is in **`RECEIVER`** mode (`get_IR`). An IP2IR’s three jacks are emitters by default (`IR` / `IR_BLASTER`); the **onboard learner** (pinhole / `get_IRL`) is separate and is not a room IR receiver entity.
+- **`infrared` receivers** / `set_IR RECEIVER` / `receiveIR` are **Global Connect only** (Unified TCP API). On iTach/GC-100/Flex the integration does not probe for RECEIVER or create receiver entities; use emitters plus the **pinhole learner** (`get_IRL`). Raw `set_ir` / `receive_ir` services remain for advanced use but `RECEIVER` is invalid on non–Global Connect hardware.
 - Removing a remote, relay, or serial port from options **deletes** its entities from the registry on reload (they are not left as orphaned grey entities).
 
 ## Development

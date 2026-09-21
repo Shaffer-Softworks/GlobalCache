@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .client import ItachClient, ItachError
 from .const import (
@@ -49,7 +49,7 @@ from .const import (
     ID_POLICY_FIXED,
 )
 from .serial_session import SerialPortSession
-from .device_util import ir_connectors_hint, module_accepts_ir
+from .device_util import ir_connectors_hint, module_accepts_ir, supports_ir_receiver
 from .pronto import parse_gc_pair_string, pronto_to_gc_sendir_tail
 
 _LOGGER = logging.getLogger(__name__)
@@ -530,6 +530,12 @@ class ItachCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_enable_infrared_receive(self, module: int, port: int) -> None:
         """Set connector to RECEIVER mode and enable receiveIR streaming."""
+        model = self.config_entry.data.get("model")
+        if not supports_ir_receiver(model):
+            raise HomeAssistantError(
+                f"IR RECEIVER mode is not supported on {model or 'this device'} "
+                "(Global Connect only; use Learn IR / get_IRL on iTach)"
+            )
         self._ensure_ir_module(module, port)
         await self.client.send_raw(
             f"set_IR,{module}:{port},RECEIVER",

@@ -38,7 +38,7 @@ Custom integration for **Global Caché iTach / GC-100** gateways over TCP (defau
 
 - **One serialized TCP client per config entry** on the control port (`client.py`). Serial **payload** traffic uses a separate socket per module: **control port + module** (e.g. 4999 for module 1 when control is 4998).
 - **Each configured remote** is a **subdevice** under the gateway (`device_util.async_register_remote_devices`). JSON commands are **`button`** entities only (legacy **`remote.*`** entities removed on reload).
-- **`infrared` platform** — one emitter (+ disabled-by-default receiver) per IR connector from `device_modules` / remotes. Emitters convert `command.get_raw_timings()` (signed µs) → GC pulse pairs → `sendir`. Receivers parse inbound `sendir` lines and call `_handle_received_signal`.
+- **`infrared` platform** — one emitter per IR connector from `device_modules` / remotes. On **Global Connect** only, a disabled-by-default receiver is added when `get_IR` reports `RECEIVER` (room receive / `receiveIR`). iTach/GC-100/Flex skip that probe. Emitters convert `command.get_raw_timings()` (signed µs) → GC pulse pairs → `sendir`. Receivers parse inbound `sendir` lines and call `_handle_received_signal`.
 - **`device_modules`** from `getdevices` is stored on the config entry at setup; **`module_accepts_ir()`** blocks IR to non-IR connectors (avoids `unknowncommand` on GC-100 serial/relay modules). Hints point users to correct modules (GC-100-12: relays **3**, IR **4** and **5**).
 - **GC-100 relay responses** use `state,...` not `setstate,...` — parsed in `client.py` (`RELAY_STATE_RE`).
 - **GC-100** allows only **one** TCP client on **4998**; avoid iHelp/other tools holding that port while HA is connected.
