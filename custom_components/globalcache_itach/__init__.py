@@ -193,6 +193,7 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     from .client import ItachClient, ItachError
     from .coordinator import ItachCoordinator
+    from .device_util import is_getversion_reply
 
     out: dict[str, Any] = {
         "data": dict(entry.data),
@@ -222,8 +223,7 @@ async def async_get_config_entry_diagnostics(
         await client.connect()
         out["getversion"] = await client.send_raw(
             "getversion,0",
-            end_on=lambda x: x.strip().lower().startswith("version,")
-            or x.strip().lower().startswith("unknowncommand"),
+            end_on=is_getversion_reply,
             timeout=10.0,
         )
         out["get_net"] = await client.send_raw(
@@ -299,6 +299,8 @@ def _unregister_services(hass: HomeAssistant) -> None:
 def _register_services(hass: HomeAssistant) -> None:
     from homeassistant.core import ServiceCall
     from homeassistant.helpers import config_validation as cv
+
+    from .device_util import is_getversion_reply
 
     if hass.services.has_service(DOMAIN, SERVICE_SEND_RAW):
         return
@@ -411,8 +413,7 @@ def _register_services(hass: HomeAssistant) -> None:
         mod = str(call.data.get("module", "0"))
         lines = await coord.client.send_raw(
             f"getversion,{mod}",
-            end_on=lambda l: l.strip().lower().startswith("version,")
-            or l.strip().lower().startswith("unknowncommand"),
+            end_on=is_getversion_reply,
             timeout=10.0,
         )
         return {"lines": lines}

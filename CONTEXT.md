@@ -42,6 +42,7 @@ Custom integration for **Global Caché iTach / GC-100** gateways over TCP (defau
 - **`device_modules`** from `getdevices` is stored on the config entry at setup; **`module_accepts_ir()`** blocks IR to non-IR connectors (avoids `unknowncommand` on GC-100 serial/relay modules). Hints point users to correct modules (GC-100-12: relays **3**, IR **4** and **5**).
 - **GC-100 relay responses** use `state,...` not `setstate,...` — parsed in `client.py` (`RELAY_STATE_RE`).
 - **GC-100** allows only **one** TCP client on **4998**; avoid iHelp/other tools holding that port while HA is connected.
+- **`getversion` reply shapes** — modern firmwares return `version,<module>,…`; **IP2CC** (and some legacy paths) may return a bare firmware string like `710-1008-05`. Helpers `is_getversion_reply` / `firmware_from_getversion_lines` in [`device_util.py`](custom_components/globalcache_itach/device_util.py) accept both (fixes config-flow timeout [#17](https://github.com/Shaffer-Softworks/GlobalCache/issues/17)). Do **not** add sleep-before-read for this.
 
 ## Serial monitoring (implemented)
 
@@ -148,4 +149,4 @@ Install via HACS (default feed) preferred; custom-repository install is no longe
 
 ---
 
-*Last updated: 2026-09-09 — HA `infrared` emitter/receiver platform (v1.1.0); min HA 2026.6.*
+*Last updated: 2026-09-20 — bare getversion / IP2CC config validation (#17).*

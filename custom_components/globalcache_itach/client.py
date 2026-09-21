@@ -8,7 +8,7 @@ import re
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING
 
-from .device_util import format_unknown_command
+from .device_util import format_unknown_command, is_getversion_reply
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -291,8 +291,12 @@ class ItachClient:
         return await self.send_raw("getdevices", end_on=end, timeout=self._command_timeout)
 
     async def getversion(self, module: str = "0") -> list[str]:
-        lines = await self.send_raw(f"getversion,{module}", timeout=self._command_timeout)
-        return lines
+        """Query firmware; accepts ``version,...`` or bare fw (e.g. IP2CC)."""
+        return await self.send_raw(
+            f"getversion,{module}",
+            end_on=is_getversion_reply,
+            timeout=self._command_timeout,
+        )
 
     async def get_relay_state(self, module: int, port: int) -> bool:
         """Query relay/contact state (``getstate`` → ``setstate,...``)."""

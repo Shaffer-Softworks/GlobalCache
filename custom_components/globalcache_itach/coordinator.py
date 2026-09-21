@@ -49,7 +49,13 @@ from .const import (
     ID_POLICY_FIXED,
 )
 from .serial_session import SerialPortSession
-from .device_util import ir_connectors_hint, module_accepts_ir, supports_ir_receiver
+from .device_util import (
+    firmware_from_getversion_lines,
+    ir_connectors_hint,
+    is_getversion_reply,
+    module_accepts_ir,
+    supports_ir_receiver,
+)
 from .pronto import parse_gc_pair_string, pronto_to_gc_sendir_tail
 
 _LOGGER = logging.getLogger(__name__)
@@ -154,12 +160,13 @@ class ItachCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             vlines = await self.client.send_raw(
                 "getversion,0",
-                end_on=lambda x: x.strip().lower().startswith("version,")
-                or x.strip().lower().startswith("unknowncommand"),
+                end_on=is_getversion_reply,
                 timeout=min(8.0, self._opts[CONF_COMMAND_TIMEOUT]),
             )
             if vlines:
-                out["version_line"] = vlines[-1].strip()
+                out["version_line"] = (
+                    firmware_from_getversion_lines(vlines) or vlines[-1].strip()
+                )
         except (TimeoutError, OSError, ItachError) as err:
             _LOGGER.debug("getversion probe failed: %s", err)
         relay_states: dict[str, bool] = {}

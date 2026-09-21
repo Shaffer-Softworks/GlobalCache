@@ -1,8 +1,10 @@
 """Device capability parsing."""
 
 from custom_components.globalcache_itach.device_util import (
+    firmware_from_getversion_lines,
     format_unknown_command,
     infer_product_label,
+    is_getversion_reply,
     module_accepts_ir,
     parse_getdevices_lines,
     prefer_discovery_model,
@@ -15,6 +17,12 @@ GC100_12_LINES = [
     "device,3,3,RELAY",
     "device,4,3,IR",
     "device,5,3,IR",
+    "endlistdevices",
+]
+
+IP2CC_LINES = [
+    "device,0,0 ETHERNET",
+    "device,1,3 RELAY",
     "endlistdevices",
 ]
 
@@ -76,6 +84,29 @@ def test_unknowncommand_21_message() -> None:
 def test_infer_gc100_12() -> None:
     mods = parse_getdevices_lines(GC100_12_LINES)
     assert infer_product_label(mods, "version,0,3.2-12") == "GC-100-12"
+
+
+def test_infer_ip2cc_relay_only() -> None:
+    mods = parse_getdevices_lines(IP2CC_LINES)
+    assert infer_product_label(mods, "710-1008-05") == "iTach IP2CC"
+
+
+def test_is_getversion_reply_shapes() -> None:
+    assert is_getversion_reply("version,0,TESTFW") is True
+    assert is_getversion_reply("unknowncommand,1") is True
+    assert is_getversion_reply("710-1008-05") is True
+    assert is_getversion_reply("device,1,3 IR") is False
+
+
+def test_firmware_from_getversion_lines() -> None:
+    assert (
+        firmware_from_getversion_lines(["version,0,TESTFW"]) == "version,0,TESTFW"
+    )
+    assert firmware_from_getversion_lines(["710-1008-05"]) == "710-1008-05"
+    assert (
+        firmware_from_getversion_lines(["noise", "version,0,X", "710-1008-05"])
+        == "version,0,X"
+    )
 
 
 def test_supports_ir_receiver_global_connect_only() -> None:
