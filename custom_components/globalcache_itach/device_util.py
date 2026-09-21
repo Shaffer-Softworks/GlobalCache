@@ -59,6 +59,25 @@ def infer_product_label(modules: list[dict[str, Any]], firmware: str) -> str:
     return "iTach"
 
 
+def supports_ir_receiver(model: str | None) -> bool:
+    """True when the product supports set_IR RECEIVER / receiveIR.
+
+    Per Unified TCP API §4.4.1, RECEIVER and receiveIR are Global Connect only.
+    iTach, GC-100, and Flex do not support room IR receive mode.
+    """
+    if not model:
+        return False
+    return "connect" in str(model).lower()
+
+
+def prefer_discovery_model(inferred: str, discovery_hint: str | None) -> str:
+    """Prefer a Global Connect beacon label over the IR-module iTach heuristic."""
+    hint = (discovery_hint or "").strip()
+    if supports_ir_receiver(hint):
+        return hint
+    return inferred or hint
+
+
 def module_accepts_ir(modules: list[dict[str, Any]], module: int) -> bool:
     if not modules:
         return True

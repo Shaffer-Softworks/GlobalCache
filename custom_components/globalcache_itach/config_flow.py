@@ -26,6 +26,7 @@ from .device_util import (
     infer_product_label,
     ir_connectors_hint,
     parse_getdevices_lines,
+    prefer_discovery_model,
 )
 from .discovery import (
     BeaconInfo,
@@ -219,6 +220,9 @@ class GlobalCacheItachConfigFlow(ConfigFlow, domain=DOMAIN):
         except vol.Invalid:
             return self.async_abort(reason="cannot_connect")
 
+        info["model"] = prefer_discovery_model(
+            str(info.get("model", "")), model_hint
+        )
         self._discovery_probe = info
         return await self.async_step_confirm()
 

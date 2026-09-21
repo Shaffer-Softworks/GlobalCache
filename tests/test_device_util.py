@@ -5,6 +5,8 @@ from custom_components.globalcache_itach.device_util import (
     infer_product_label,
     module_accepts_ir,
     parse_getdevices_lines,
+    prefer_discovery_model,
+    supports_ir_receiver,
 )
 
 GC100_12_LINES = [
@@ -74,3 +76,23 @@ def test_unknowncommand_21_message() -> None:
 def test_infer_gc100_12() -> None:
     mods = parse_getdevices_lines(GC100_12_LINES)
     assert infer_product_label(mods, "version,0,3.2-12") == "GC-100-12"
+
+
+def test_supports_ir_receiver_global_connect_only() -> None:
+    assert supports_ir_receiver("Global Connect") is True
+    assert supports_ir_receiver("GlobalConnect-IR") is True
+    assert supports_ir_receiver("iTach IP2IR") is False
+    assert supports_ir_receiver("iTachWF2IR") is False
+    assert supports_ir_receiver("GC-100-12") is False
+    assert supports_ir_receiver("iTachFlexEthernet") is False
+    assert supports_ir_receiver("") is False
+    assert supports_ir_receiver(None) is False
+
+
+def test_prefer_discovery_model_keeps_global_connect() -> None:
+    assert (
+        prefer_discovery_model("iTach IP2IR", "GlobalConnect IR")
+        == "GlobalConnect IR"
+    )
+    assert prefer_discovery_model("iTach IP2IR", "iTachIP2IR") == "iTach IP2IR"
+    assert prefer_discovery_model("iTach", "") == "iTach"
