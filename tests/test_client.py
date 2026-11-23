@@ -166,6 +166,61 @@ async def test_getdevices(fake_server: tuple[str, int]) -> None:
 
 
 @pytest.mark.asyncio
+async def test_form_gc_pairs_sent_on_the_wire() -> None:
+    """A command built by the options form is the sendir line written to the socket."""
+    from custom_components.globalcache_itach.command_util import (
+        ir_command_from_fields,
+        ir_send_repeat,
+    )
+    from custom_components.globalcache_itach.pronto import parse_gc_pair_string
+
+    seen: list[bytes] = []
+
+    async def handler(
+        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        try:
+            while True:
+                raw = await reader.readuntil(b"\r")
+                seen.append(raw)
+                text = raw.decode().strip()
+                parts = text.split(",")
+                writer.write(f"completeir,{parts[1]},{parts[2]}\r".encode())
+                await writer.drain()
+        except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
+            pass
+        finally:
+            writer.close()
+
+    server = await asyncio.start_server(handler, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    cmd, err = ir_command_from_fields(
+        "Wire check",
+        "22,64,22,21",
+        "gc_pairs",
+        freq=40000,
+        repeat=3,
+    )
+    assert err is None and cmd is not None
+    client = ItachClient("127.0.0.1", port, connect_timeout=2.0, command_timeout=2.0)
+    try:
+        async with client:
+            await client.send_sendir(
+                1,
+                2,
+                5,
+                int(cmd["freq"]),
+                ir_send_repeat(cmd, 1),
+                1,
+                parse_gc_pair_string(cmd["data"]),
+            )
+    finally:
+        server.close()
+        await server.wait_closed()
+    assert seen == [b"sendir,1:2,5,40000,3,1,22,64,22,21\r"]
+
+
+@pytest.mark.asyncio
 async def test_send_sendir_completeir(fake_server: tuple[str, int]) -> None:
     host, port = fake_server
     client = ItachClient(host, port, connect_timeout=2.0, command_timeout=2.0)

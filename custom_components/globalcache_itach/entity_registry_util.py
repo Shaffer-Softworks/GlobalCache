@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
+from .command_util import command_button_slug
 from .const import (
     CONF_CMD_DATA,
     CONF_CMD_NAME,
@@ -129,15 +130,13 @@ def serial_text_unique_id(entry_id: str, serial_id: str) -> str:
 
 
 def serial_button_unique_id(entry_id: str, serial_id: str, command_name: str) -> str:
-    slug = command_name.strip().lower().replace(" ", "_")
-    return f"{entry_id}_serial_{serial_id}_btn_{slug}"
+    return f"{entry_id}_serial_{serial_id}_btn_{command_button_slug(command_name)}"
 
 
 def remote_button_unique_id(
     entry_id: str, remote_id: str, command_name: str
 ) -> str:
-    slug = command_name.strip().lower().replace(" ", "_")
-    return f"{entry_id}_{remote_id}_btn_{slug}"
+    return f"{entry_id}_{remote_id}_btn_{command_button_slug(command_name)}"
 
 
 def serial_rx_unique_id(entry_id: str, serial_id: str) -> str:

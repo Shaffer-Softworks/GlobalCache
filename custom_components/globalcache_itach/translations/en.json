@@ -128,9 +128,36 @@
           "ir_count": "Repeat multiplier (per send)"
         }
       },
-      "remote_commands": {
+      "remote_command_list": {
         "title": "Commands",
-        "description": "{hint}",
+        "description": "{summary}",
+        "data": {
+          "next": "Choose an action"
+        }
+      },
+      "remote_command_pick": {
+        "title": "Choose command",
+        "description": "{summary}",
+        "data": {
+          "command": "Command"
+        }
+      },
+      "remote_command_form": {
+        "title": "Command",
+        "description": "Enter one infrared command. Leave frequency, repeat, offset, and sendir ID blank to use the remote and gateway defaults.",
+        "data": {
+          "name": "Name",
+          "format": "Format",
+          "data": "Code",
+          "freq": "Carrier frequency (optional)",
+          "repeat": "Repeat (optional)",
+          "offset": "Offset (optional)",
+          "command_id": "sendir ID (optional)"
+        }
+      },
+      "remote_command_import": {
+        "title": "Import commands",
+        "description": "One JSON array of command objects, with a comma between objects. Import replaces every command on this remote.",
         "data": {
           "commands_json": "JSON array of commands"
         }
@@ -211,9 +238,31 @@
           "monitor_incoming": "Monitor incoming data (persistent connection)"
         }
       },
-      "serial_commands": {
+      "serial_command_list": {
         "title": "Serial presets",
-        "description": "{hint}",
+        "description": "{summary}",
+        "data": {
+          "next": "Choose an action"
+        }
+      },
+      "serial_command_pick": {
+        "title": "Choose preset",
+        "description": "{summary}",
+        "data": {
+          "command": "Preset"
+        }
+      },
+      "serial_command_form": {
+        "title": "Preset",
+        "description": "Enter one preset. It becomes a button on this serial port.",
+        "data": {
+          "name": "Name",
+          "payload": "Payload"
+        }
+      },
+      "serial_command_import": {
+        "title": "Import presets",
+        "description": "One JSON array of {name, payload} objects, with a comma between objects. Import replaces every preset. Use [] for none.",
         "data": {
           "commands_json": "JSON array"
         }
@@ -234,6 +283,12 @@
     },
     "error": {
       "command_name_required": "Enter a command name.",
+      "command_fields": "Enter a name and the command text.",
+      "invalid_json": "That is not valid JSON. Use one array, with a comma between objects.",
+      "commands_not_array": "Commands must be one JSON array, not several arrays.",
+      "bad_format": "Format must be Pronto hex, Global Caché pulse pairs, or a full sendir line.",
+      "duplicate_command": "Another command already uses that button name.",
+      "command_override_range": "Frequency, repeat, offset, or sendir ID is outside the allowed range.",
       "not_loaded": "Integration is not loaded. Reload Global Caché iTach and try again.",
       "learn_failed": "Could not learn IR code."
     },

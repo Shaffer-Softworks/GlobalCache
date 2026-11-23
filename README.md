@@ -27,6 +27,10 @@ There is **no `remote` platform** — each JSON command becomes its own **button
 |---|---|
 | [![LG Infrared](docs/images/lg-infrared-device.png)](docs/images/lg-infrared-device.png) | [![GC-100 gateway](docs/images/gc100-gateway.png)](docs/images/gc100-gateway.png) |
 
+| Command list | Add a command |
+|---|---|
+| [![Command list](docs/images/command-list.png)](docs/images/command-list.png) | [![Add a command](docs/images/command-form.png)](docs/images/command-form.png) |
+
 ## Installation
 
 ### Using HACS
@@ -97,11 +101,11 @@ Open **Configure** on the integration card (gear icon on older layouts):
 |--------|---------|
 | **IR defaults** | Carrier frequency, repeat, offset, sendir ID policy (auto-increment vs fixed). |
 | **Timeouts** | Connect and command timeouts. |
-| **Add remote** | Name, module/port (e.g. module `1`, port `2` → connector **1:2**), repeat multiplier, **JSON command list**. |
+| **Add remote** | Name, module/port (e.g. module `1`, port `2` → connector **1:2**), repeat multiplier, then one command at a time (or **Import JSON**). |
 | **Learn IR command (pinhole)** | Always available in Configure. Pick an existing remote (or enter a name + IR connector to create one) and a command name → Submit → aim the handheld at the iTach **pinhole** within the timeout. Saves a **`full_sendir`** button (rewrites connector to the remote’s module:port). Same name replaces an existing command. |
 | **Edit remote** / **Remove remote** | Change or delete a configured remote (entity IDs stay stable on edit). Shown only when at least one remote exists. |
 | **Add relay** / **Edit relay** / **Remove relay** | Relay `switch` entities via `setstate` / `getstate`. |
-| **Add serial port** / **Edit serial** / **Remove serial** | Serial `text` entity, optional preset **buttons**, **Last received** sensor. |
+| **Add serial port** / **Edit serial** / **Remove serial** | Serial `text` entity, optional preset **buttons** (one at a time, or **Import JSON**), **Last received** sensor. |
 
 #### Learn IR (pinhole)
 
@@ -116,7 +120,7 @@ The learned line is stored as a **`full_sendir`** command button (connector rewr
 
 ### Devices and entities
 
-Each **gateway** is one hub device with diagnostic sensors (**TCP connected**, **Last gateway poll**, **Configured remotes**, optional **Gateway diagnostics**), plus one **`infrared` emitter** per IR connector discovered via `getdevices` (and, on **Global Connect** only, an optional **receiver** when a jack is in `RECEIVER` mode). Each configured **remote** appears as a child device with one **button** per JSON command.
+Each **gateway** is one hub device with diagnostic sensors (**TCP connected**, **Last gateway poll**, **Configured remotes**, optional **Gateway diagnostics**), plus one **`infrared` emitter** per IR connector discovered via `getdevices` (and, on **Global Connect** only, an optional **receiver** when a jack is in `RECEIVER` mode). Each configured **remote** appears as a child device with one **button** per command.
 
 ![Gateway device](docs/images/gateway-device.png)
 
@@ -134,9 +138,32 @@ Each **gateway** is one hub device with diagnostic sensors (**TCP connected**, *
 
 **Diagnostics in the UI:** enable **Gateway diagnostics** (off by default) to see raw `getdevices` / `getversion` text. On the device page use **⋮ → Download diagnostics** for a JSON bundle (entry data/options, coordinator snapshot, live probes).
 
-### Command JSON format
+### Commands
 
-Each command is an object:
+On **Add remote** or **Edit remote**, after the connector, each button is its own form: name, format (`pronto`, `gc_pairs`, or `full_sendir`), and the code. Leave carrier frequency, repeat, offset, and sendir ID blank to use the remote and gateway defaults. Adding the same name again replaces that command. Renaming or removing a command drops the old button the next time the integration reloads.
+
+![Command list](docs/images/command-list.png)
+
+![Add a command](docs/images/command-form.png)
+
+**Import JSON** replaces the whole list. Use one array, with a comma between objects:
+
+![Import commands](docs/images/command-import.png)
+
+```json
+[
+  {
+    "name": "PowerOn",
+    "format": "gc_pairs",
+    "data": "172,172,22,64,22,64"
+  },
+  {
+    "name": "PowerOff",
+    "format": "gc_pairs",
+    "data": "173,173,21,65,21,65"
+  }
+]
+```
 
 | Field | Required | Description |
 |--------|----------|-------------|
@@ -145,19 +172,7 @@ Each command is an object:
 | `format` | no | `pronto` (alias `pronto_hex`), `gc_pairs` (alias `gc_sendir_tail`), or `full_sendir`. |
 | `freq`, `repeat`, `offset`, `command_id` | no | Overrides for that command only. |
 
-Example:
-
-```json
-[
-  {
-    "name": "power",
-    "format": "pronto",
-    "data": "0000 006D 0000 0022 00AC 00AC 0015 0040"
-  }
-]
-```
-
-Serial preset JSON uses `name` and `payload` (see options hint text).
+Serial presets use the same list. Each preset is a name and a payload. An empty list keeps the text entity only. Import JSON for presets is an array of `{name, payload}` objects.
 
 ### Automations and dashboards
 
@@ -191,7 +206,7 @@ Protocol reference: [iTach API (PDF)](https://www.globalcache.com/files/docs/API
 - **GC-100** allows only **one** TCP client on port **4998** at a time; avoid iHelp/other tools holding that port while Home Assistant is connected.
 - **IR learner** — use **Configure → Learn IR command (pinhole)** (always listed, even with no remotes yet) to capture a `sendir` line and append it to a remote as a **button** (`full_sendir`). With no remotes, the same flow creates one. Services `ir_learner_start` / `ir_learner_stop` and bus events remain for automations; Global Caché’s **iLearn** utility is still useful for advanced editing.
 - **`infrared` receivers** / `set_IR RECEIVER` / `receiveIR` are **Global Connect only** (Unified TCP API). On iTach/GC-100/Flex the integration does not probe for RECEIVER or create receiver entities; use emitters plus the **pinhole learner** (`get_IRL`). Raw `set_ir` / `receive_ir` services remain for advanced use but `RECEIVER` is invalid on non–Global Connect hardware.
-- Removing a remote, relay, or serial port from options **deletes** its entities from the registry on reload (they are not left as orphaned grey entities).
+- Removing a remote, relay, serial port, or one of its commands from options **deletes** the matching entities from the registry on reload (they are not left as orphaned grey entities). Renaming a command does the same for the old button name.
 
 ## Development
 
