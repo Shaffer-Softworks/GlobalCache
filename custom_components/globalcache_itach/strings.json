@@ -183,7 +183,7 @@
       },
       "serial_command_import": {
         "title": "Import presets",
-        "description": "One JSON array of {name, payload} objects, with a comma between objects. Import replaces every preset. Use [] for none.",
+        "description": "One JSON array of objects with name and payload, with a comma between objects. Import replaces every preset. Use an empty array for none.",
         "data": {
           "commands_json": "JSON array"
         }
