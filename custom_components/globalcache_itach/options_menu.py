@@ -41,3 +41,21 @@ def build_options_init_menu(
         menu.pop("edit_serial", None)
         menu.pop("remove_serial", None)
     return menu
+
+
+def build_command_list_menu(*, has_commands: bool, save_label: str) -> dict[str, str]:
+    """Actions for the per-command editor. Edit and remove need an existing command."""
+    menu: dict[str, str] = {"add": "Add command"}
+    if has_commands:
+        menu["edit"] = "Edit command"
+        menu["remove"] = "Remove command"
+    menu["import_json"] = "Import JSON"
+    menu["save"] = save_label
+    return menu
+
+
+IR_FORMAT_LABELS: dict[str, str] = {
+    "pronto": "Pronto hex",
+    "gc_pairs": "Global Caché pulse pairs",
+    "full_sendir": "Full sendir line",
+}

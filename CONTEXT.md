@@ -70,7 +70,7 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 
 2. **Options flow menus** — some steps use **`vol.In({...})`** instead of **`SelectSelector`** for broader HA compatibility.
 
-3. **Translations** — `options.step.remote_commands` needs **`description`** + **`{hint}`** placeholder. **`options.step.init.data.next`** in `strings.json`. IR/serial command JSON uses **`TextSelector(multiline=True)`** (textarea), not a single-line field. Learn IR uses **`learn_ir`** / **`learn_ir_capture`** with placeholders `{timeout}`, `{command}`, `{detail}`, and **`{ir_hint}`** on `learn_ir` (always pass a non-empty placeholder so HA does not show the raw token). When creating a remote mid-learn, the form key is **`remote_name`** (not `name`) because `CONF_REMOTE_NAME` and `CONF_CMD_NAME` both serialize as `"name"`.
+3. **Translations** — Command editing is a list (`remote_command_list` / `serial_command_list`) with **`description`** `{summary}` (always pass a non-empty summary). Add/edit is one form per command; **Import JSON** is the multiline array (`remote_command_import` / `serial_command_import`). **`options.step.init.data.next`** in `strings.json`. Learn IR uses **`learn_ir`** / **`learn_ir_capture`** with placeholders `{timeout}`, `{command}`, `{detail}`, and **`{ir_hint}`** on `learn_ir` (always pass a non-empty placeholder so HA does not show the raw token). When creating a remote mid-learn, the form key is **`remote_name`** (not `name`) because `CONF_REMOTE_NAME` and `CONF_CMD_NAME` both serialize as `"name"`.
 
 4. **Do not use `listen` as a config-flow field key** — Home Assistant does not apply `options.step.*.data.listen` labels; UI shows raw `listen`. Use **`monitor_incoming`** with label *Monitor incoming data (persistent connection)* (plain **`bool`**, same as `append_cr`).
 
@@ -98,7 +98,7 @@ Matching uses **unique_id** patterns (`{entry_id}_relay_*`, `{entry_id}_serial_*
 ## Documentation
 
 - **[`README.md`](README.md)** — user-facing install, configure, API mapping, screenshot gallery.
-- **[`docs/images/`](docs/images/)** — committed UI screenshots (integrations, config flow, options with Learn IR, gateway emitters, remotes, LG Infrared example, GC-100).
+- **[`docs/images/`](docs/images/)** — committed UI screenshots (integrations, config flow, options with Learn IR, command list / add command / import JSON, gateway emitters, remotes, LG Infrared example, GC-100).
 - **[`docs/screenshot-manifest.yaml`](docs/screenshot-manifest.yaml)** — Playwright capture plan (device selectors, paths, actions). Docker HA is on host port **8124**.
 - **Cursor skill:** `~/.cursor/skills/ha-integration-screenshots/` — reusable across all HA custom integration repos.
 

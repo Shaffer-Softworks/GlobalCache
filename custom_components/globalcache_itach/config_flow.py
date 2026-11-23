@@ -17,9 +17,17 @@ from homeassistant.helpers import selector
 
 from .client import ItachClient, ItachError
 from .command_util import (
+    apply_command_change,
+    canonical_ir_format,
+    command_json_error_key,
+    format_command_summary,
+    imported_commands_error,
+    ir_command_from_fields,
     parse_commands_json,
     parse_serial_commands_json,
+    remove_command_at,
     rewrite_sendir_connector,
+    serial_command_from_fields,
 )
 from .device_util import (
     default_ir_module,
@@ -35,12 +43,20 @@ from .discovery import (
     async_scan_beacons,
     normalize_unique_id,
 )
-from .options_menu import build_options_init_menu
+from .options_menu import (
+    IR_FORMAT_LABELS,
+    build_command_list_menu,
+    build_options_init_menu,
+)
 from .const import (
     _LEGACY_SERIAL_LISTEN,
     CONF_CMD_DATA,
     CONF_CMD_FORMAT,
+    CONF_CMD_FREQ,
+    CONF_CMD_ID,
     CONF_CMD_NAME,
+    CONF_CMD_OFFSET,
+    CONF_CMD_REPEAT,
     CONF_COMMAND_TIMEOUT,
     CONF_COMMANDS,
     CONF_CONN_PORT,
@@ -84,9 +100,142 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-_COMMANDS_JSON_SELECTOR = selector.TextSelector(
-    selector.TextSelectorConfig(multiline=True)
-)
+_MULTILINE = selector.TextSelector(selector.TextSelectorConfig(multiline=True))
+
+_IR_IMPORT_EXAMPLE = [
+    {
+        CONF_CMD_NAME: "PowerOn",
+        CONF_CMD_FORMAT: "gc_pairs",
+        CONF_CMD_DATA: "172,172,22,64,22,64",
+    },
+    {
+        CONF_CMD_NAME: "PowerOff",
+        CONF_CMD_FORMAT: "gc_pairs",
+        CONF_CMD_DATA: "173,173,21,65,21,65",
+    },
+]
+_SERIAL_IMPORT_EXAMPLE = [
+    {CONF_CMD_NAME: "Status", CONF_SERIAL_PAYLOAD: "STATUS"},
+    {CONF_CMD_NAME: "Power", CONF_SERIAL_PAYLOAD: "PWR ON"},
+]
+
+
+def _number_selector(
+    *,
+    minimum: float,
+    maximum: float,
+    step: float,
+    unit: str | None = None,
+) -> selector.NumberSelector:
+    if unit is None:
+        return selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                mode=selector.NumberSelectorMode.BOX,
+                min=minimum,
+                max=maximum,
+                step=step,
+            )
+        )
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            mode=selector.NumberSelectorMode.BOX,
+            min=minimum,
+            max=maximum,
+            step=step,
+            unit_of_measurement=unit,
+        )
+    )
+
+
+def _optional_number(
+    key: str,
+    suggested: Any,
+    *,
+    minimum: float,
+    maximum: float,
+    step: float,
+    unit: str | None = None,
+) -> tuple[vol.Marker, selector.NumberSelector]:
+    """Optional number that stays blank when cleared (suggested_value, not default)."""
+    kwargs: dict[str, Any] = {}
+    if suggested is not None and suggested != "":
+        kwargs["description"] = {"suggested_value": suggested}
+    return (
+        vol.Optional(key, **kwargs),
+        _number_selector(minimum=minimum, maximum=maximum, step=step, unit=unit),
+    )
+
+
+def _suggested(user_input: dict[str, Any] | None, existing: dict[str, Any] | None, key: str) -> Any:
+    if user_input is not None:
+        return user_input.get(key)
+    if not existing:
+        return None
+    return existing.get(key)
+
+
+def _ir_command_schema(
+    user_input: dict[str, Any] | None, existing: dict[str, Any] | None
+) -> vol.Schema:
+    source = user_input if user_input is not None else (existing or {})
+    raw_format = str(source.get(CONF_CMD_FORMAT, "pronto"))
+    fmt = canonical_ir_format(raw_format) or "pronto"
+    freq_key, freq_sel = _optional_number(
+        CONF_CMD_FREQ,
+        _suggested(user_input, existing, CONF_CMD_FREQ),
+        minimum=15000,
+        maximum=500000,
+        step=1000,
+        unit="Hz",
+    )
+    repeat_key, repeat_sel = _optional_number(
+        CONF_CMD_REPEAT,
+        _suggested(user_input, existing, CONF_CMD_REPEAT),
+        minimum=1,
+        maximum=50,
+        step=1,
+    )
+    offset_key, offset_sel = _optional_number(
+        CONF_CMD_OFFSET,
+        _suggested(user_input, existing, CONF_CMD_OFFSET),
+        minimum=1,
+        maximum=383,
+        step=2,
+    )
+    id_key, id_sel = _optional_number(
+        CONF_CMD_ID,
+        _suggested(user_input, existing, CONF_CMD_ID),
+        minimum=0,
+        maximum=65535,
+        step=1,
+    )
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_CMD_NAME, default=str(source.get(CONF_CMD_NAME, ""))
+            ): str,
+            vol.Required(CONF_CMD_FORMAT, default=fmt): vol.In(IR_FORMAT_LABELS),
+            vol.Required(
+                CONF_CMD_DATA, default=str(source.get(CONF_CMD_DATA, ""))
+            ): _MULTILINE,
+            freq_key: freq_sel,
+            repeat_key: repeat_sel,
+            offset_key: offset_sel,
+            id_key: id_sel,
+        }
+    )
+
+
+def _draft_command_list(draft: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    raw = draft.get(key)
+    if not isinstance(raw, list):
+        return []
+    return [cmd for cmd in raw if isinstance(cmd, dict)]
+
+
+def _import_json_default(commands: list[dict[str, Any]], example: list[dict[str, Any]]) -> str:
+    payload = commands if commands else example
+    return json.dumps(payload, indent=2)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
@@ -529,6 +678,8 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
         self._relay_draft: dict[str, Any] | None = None
         self._serial_draft: dict[str, Any] | None = None
         self._learn_draft: dict[str, Any] | None = None
+        self._editing_command_index: int | None = None
+        self._command_pick_mode: str | None = None
 
     def _options_entry(self) -> ConfigEntry:
         """Resolve config entry from flow handler (entry id); works without ``OptionsFlow.__init__(entry)``."""
@@ -738,7 +889,7 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
             self._remote_draft[CONF_MODULE] = int(user_input[CONF_MODULE])
             self._remote_draft[CONF_CONN_PORT] = int(user_input[CONF_CONN_PORT])
             self._remote_draft[CONF_IR_COUNT] = int(user_input[CONF_IR_COUNT])
-            return await self.async_step_remote_commands()
+            return await self.async_step_remote_command_list()
         entry = self._options_entry()
         modules = list(entry.data.get(CONF_DEVICE_MODULES, []))
         dm = int(
@@ -789,70 +940,168 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
             },
         )
 
-    async def async_step_remote_commands(
+    def _save_remote(self) -> FlowResult:
+        """Write the remote draft, including its command list, into options."""
+        assert self._remote_draft is not None
+        commands = _draft_command_list(self._remote_draft, CONF_COMMANDS)
+        opts = self._opts()
+        remotes = list(opts.get(CONF_REMOTES, []))
+        existing_id = self._remote_draft.get(CONF_REMOTE_ID)
+        new_remote: dict[str, Any] = {
+            CONF_REMOTE_ID: str(existing_id) if existing_id else str(uuid.uuid4()),
+            CONF_REMOTE_NAME: self._remote_draft[CONF_REMOTE_NAME],
+            CONF_MODULE: int(self._remote_draft[CONF_MODULE]),
+            CONF_CONN_PORT: int(self._remote_draft[CONF_CONN_PORT]),
+            CONF_IR_COUNT: int(self._remote_draft[CONF_IR_COUNT]),
+            CONF_COMMANDS: commands,
+        }
+        if existing_id:
+            eid = str(existing_id)
+            remotes = [
+                new_remote if str(r.get(CONF_REMOTE_ID)) == eid else r for r in remotes
+            ]
+        else:
+            remotes.append(new_remote)
+        self._remote_draft = None
+        self._editing_command_index = None
+        return self.async_create_entry(
+            title="", data={**opts, CONF_REMOTES: remotes}
+        )
+
+    async def async_step_remote_command_list(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: dict[str, str] = {}
+        """Add, edit, remove, or import commands, then save the remote."""
         assert self._remote_draft is not None
+        commands = _draft_command_list(self._remote_draft, CONF_COMMANDS)
         if user_input is not None:
-            raw = user_input["commands_json"]
-            commands, parse_err = parse_commands_json(raw)
-            if parse_err:
-                errors["base"] = parse_err
-            elif commands is not None:
-                opts = self._opts()
-                remotes = list(opts.get(CONF_REMOTES, []))
-                existing_id = self._remote_draft.get(CONF_REMOTE_ID)
-                new_remote: dict[str, Any] = {
-                    CONF_REMOTE_ID: str(existing_id)
-                    if existing_id
-                    else str(uuid.uuid4()),
-                    CONF_REMOTE_NAME: self._remote_draft[CONF_REMOTE_NAME],
-                    CONF_MODULE: int(self._remote_draft[CONF_MODULE]),
-                    CONF_CONN_PORT: int(self._remote_draft[CONF_CONN_PORT]),
-                    CONF_IR_COUNT: int(self._remote_draft[CONF_IR_COUNT]),
-                    CONF_COMMANDS: commands,
-                }
-                if existing_id:
-                    eid = str(existing_id)
-                    remotes = [
-                        new_remote if str(r.get(CONF_REMOTE_ID)) == eid else r
-                        for r in remotes
-                    ]
-                else:
-                    remotes.append(new_remote)
-                new_opts = {**opts, CONF_REMOTES: remotes}
-                self._remote_draft = None
-                return self.async_create_entry(title="", data=new_opts)
-        existing_cmds = self._remote_draft.get(CONF_COMMANDS)
-        if isinstance(existing_cmds, list) and existing_cmds:
-            default_json = json.dumps(existing_cmds, indent=2)
+            action = user_input["next"]
+            if action == "add":
+                self._editing_command_index = None
+                return await self.async_step_remote_command_form()
+            if action == "edit":
+                self._command_pick_mode = "edit"
+                return await self.async_step_remote_command_pick()
+            if action == "remove":
+                self._command_pick_mode = "remove"
+                return await self.async_step_remote_command_pick()
+            if action == "import_json":
+                return await self.async_step_remote_command_import()
+            if action == "save":
+                return self._save_remote()
+        self._editing_command_index = None
+        self._command_pick_mode = None
+        menu = build_command_list_menu(
+            has_commands=bool(commands), save_label="Save remote"
+        )
+        return self.async_show_form(
+            step_id="remote_command_list",
+            data_schema=vol.Schema({vol.Required("next"): vol.In(menu)}),
+            description_placeholders={
+                "summary": format_command_summary(commands, include_format=True),
+            },
+        )
+
+    async def async_step_remote_command_pick(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Choose which command to edit or remove."""
+        assert self._remote_draft is not None
+        commands = _draft_command_list(self._remote_draft, CONF_COMMANDS)
+        if not commands:
+            return await self.async_step_remote_command_list()
+        mode = self._command_pick_mode or "edit"
+        if user_input is not None:
+            index = int(user_input["command"])
+            if mode == "remove":
+                self._remote_draft[CONF_COMMANDS] = remove_command_at(commands, index)
+                self._command_pick_mode = None
+                return await self.async_step_remote_command_list()
+            self._editing_command_index = index
+            return await self.async_step_remote_command_form()
+        choices = {
+            str(index): format_command_summary([cmd], include_format=True)
+            for index, cmd in enumerate(commands)
+        }
+        if mode == "remove":
+            summary = (
+                "Choose a command to remove. The button is deleted when you save "
+                f"the remote. {format_command_summary(commands, include_format=True)}"
+            )
         else:
-            default_json = json.dumps(
-                [
-                    {
-                        CONF_CMD_NAME: "power",
-                        CONF_CMD_FORMAT: "pronto",
-                        CONF_CMD_DATA: "0000 006D 0001 0010 00AC 00AC 0015 0040",
-                    }
-                ],
-                indent=2,
+            summary = (
+                "Choose a command to edit. "
+                f"{format_command_summary(commands, include_format=True)}"
             )
         return self.async_show_form(
-            step_id="remote_commands",
+            step_id="remote_command_pick",
+            data_schema=vol.Schema({vol.Required("command"): vol.In(choices)}),
+            description_placeholders={"summary": summary},
+        )
+
+    async def async_step_remote_command_form(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """One infrared command: name, format, code, and optional overrides."""
+        assert self._remote_draft is not None
+        commands = _draft_command_list(self._remote_draft, CONF_COMMANDS)
+        index = self._editing_command_index
+        existing = commands[index] if index is not None and index < len(commands) else None
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            built, err = ir_command_from_fields(
+                str(user_input.get(CONF_CMD_NAME, "")),
+                str(user_input.get(CONF_CMD_DATA, "")),
+                str(user_input.get(CONF_CMD_FORMAT, "")),
+                user_input.get(CONF_CMD_FREQ),
+                user_input.get(CONF_CMD_REPEAT),
+                user_input.get(CONF_CMD_OFFSET),
+                user_input.get(CONF_CMD_ID),
+            )
+            if err or built is None:
+                errors["base"] = err or "command_fields"
+            else:
+                updated, apply_err = apply_command_change(
+                    commands, built, original_index=index if existing else None
+                )
+                if apply_err or updated is None:
+                    errors["base"] = apply_err or "duplicate_command"
+                else:
+                    self._remote_draft[CONF_COMMANDS] = updated
+                    self._editing_command_index = None
+                    return await self.async_step_remote_command_list()
+        return self.async_show_form(
+            step_id="remote_command_form",
+            data_schema=_ir_command_schema(user_input, existing),
+            errors=errors,
+        )
+
+    async def async_step_remote_command_import(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Replace the draft command list from a JSON array."""
+        assert self._remote_draft is not None
+        commands = _draft_command_list(self._remote_draft, CONF_COMMANDS)
+        errors: dict[str, str] = {}
+        default_json = _import_json_default(commands, _IR_IMPORT_EXAMPLE)
+        if user_input is not None:
+            default_json = str(user_input.get("commands_json", default_json))
+            parsed, parse_err = parse_commands_json(default_json)
+            if parse_err or parsed is None:
+                errors["base"] = command_json_error_key(parse_err or "")
+            else:
+                slug_err = imported_commands_error(parsed)
+                if slug_err:
+                    errors["base"] = slug_err
+                else:
+                    self._remote_draft[CONF_COMMANDS] = parsed
+                    return await self.async_step_remote_command_list()
+        return self.async_show_form(
+            step_id="remote_command_import",
             data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        "commands_json", default=default_json
-                    ): _COMMANDS_JSON_SELECTOR,
-                }
+                {vol.Required("commands_json", default=default_json): _MULTILINE}
             ),
             errors=errors,
-            description_placeholders={
-                "hint": "JSON array of {name, data, format}. "
-                "format: pronto | gc_pairs | full_sendir (aliases pronto_hex, gc_sendir_tail). "
-                "Optional per-command freq, repeat, offset, command_id."
-            },
         )
 
     async def async_step_learn_ir(
@@ -1291,7 +1540,7 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
             self._serial_draft[CONF_SERIAL_LISTEN] = user_input[
                 CONF_SERIAL_LISTEN
             ]
-            return await self.async_step_serial_commands()
+            return await self.async_step_serial_command_list()
         default_settings = str(
             self._serial_draft.get(CONF_SERIAL_SETTINGS, DEFAULT_SERIAL_SETTINGS)
         )
@@ -1321,76 +1570,187 @@ class GlobalCacheItachOptionsFlow(OptionsFlow):
             ),
         )
 
-    async def async_step_serial_commands(
+    def _save_serial(self) -> FlowResult:
+        """Write the serial draft, including preset buttons, into options."""
+        assert self._serial_draft is not None
+        commands = _draft_command_list(self._serial_draft, CONF_SERIAL_COMMANDS)
+        opts = self._opts()
+        ports = list(opts.get(CONF_SERIAL_PORTS, []))
+        existing_id = self._serial_draft.get(CONF_SERIAL_ID)
+        new_port: dict[str, Any] = {
+            CONF_SERIAL_ID: str(existing_id) if existing_id else str(uuid.uuid4()),
+            CONF_SERIAL_NAME: self._serial_draft[CONF_SERIAL_NAME],
+            CONF_MODULE: int(self._serial_draft[CONF_MODULE]),
+            CONF_CONN_PORT: int(self._serial_draft[CONF_CONN_PORT]),
+            CONF_SERIAL_SETTINGS: self._serial_draft.get(
+                CONF_SERIAL_SETTINGS, DEFAULT_SERIAL_SETTINGS
+            ),
+            CONF_SERIAL_APPEND_CR: bool(
+                self._serial_draft.get(CONF_SERIAL_APPEND_CR, True)
+            ),
+            CONF_SERIAL_LISTEN: bool(
+                self._serial_draft.get(
+                    CONF_SERIAL_LISTEN,
+                    self._serial_draft.get(_LEGACY_SERIAL_LISTEN, True),
+                )
+            ),
+            CONF_SERIAL_COMMANDS: commands,
+        }
+        if existing_id:
+            sid = str(existing_id)
+            ports = [
+                new_port if str(p.get(CONF_SERIAL_ID)) == sid else p for p in ports
+            ]
+        else:
+            ports.append(new_port)
+        self._serial_draft = None
+        self._editing_command_index = None
+        return self.async_create_entry(
+            title="", data={**opts, CONF_SERIAL_PORTS: ports}
+        )
+
+    async def async_step_serial_command_list(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: dict[str, str] = {}
+        """Add, edit, remove, or import serial presets, then save the port."""
         assert self._serial_draft is not None
+        commands = _draft_command_list(self._serial_draft, CONF_SERIAL_COMMANDS)
         if user_input is not None:
-            commands, parse_err = parse_serial_commands_json(
-                user_input["commands_json"]
-            )
-            if parse_err:
-                errors["base"] = parse_err
-            elif commands is not None:
-                opts = self._opts()
-                ports = list(opts.get(CONF_SERIAL_PORTS, []))
-                existing_id = self._serial_draft.get(CONF_SERIAL_ID)
-                new_port: dict[str, Any] = {
-                    CONF_SERIAL_ID: str(existing_id)
-                    if existing_id
-                    else str(uuid.uuid4()),
-                    CONF_SERIAL_NAME: self._serial_draft[CONF_SERIAL_NAME],
-                    CONF_MODULE: int(self._serial_draft[CONF_MODULE]),
-                    CONF_CONN_PORT: int(self._serial_draft[CONF_CONN_PORT]),
-                    CONF_SERIAL_SETTINGS: self._serial_draft.get(
-                        CONF_SERIAL_SETTINGS, DEFAULT_SERIAL_SETTINGS
-                    ),
-                    CONF_SERIAL_APPEND_CR: bool(
-                        self._serial_draft.get(CONF_SERIAL_APPEND_CR, True)
-                    ),
-                    CONF_SERIAL_LISTEN: bool(
-                        self._serial_draft.get(
-                            CONF_SERIAL_LISTEN,
-                            self._serial_draft.get(_LEGACY_SERIAL_LISTEN, True),
-                        )
-                    ),
-                    CONF_SERIAL_COMMANDS: commands,
-                }
-                if existing_id:
-                    sid = str(existing_id)
-                    ports = [
-                        new_port if str(p.get(CONF_SERIAL_ID)) == sid else p
-                        for p in ports
-                    ]
-                else:
-                    ports.append(new_port)
-                self._serial_draft = None
-                return self.async_create_entry(
-                    title="", data={**opts, CONF_SERIAL_PORTS: ports}
-                )
-        existing_cmds = self._serial_draft.get(CONF_SERIAL_COMMANDS)
-        if isinstance(existing_cmds, list) and existing_cmds:
-            default_json = json.dumps(existing_cmds, indent=2)
-        else:
-            default_json = json.dumps(
-                [{CONF_CMD_NAME: "status", CONF_SERIAL_PAYLOAD: "STATUS"}],
-                indent=2,
-            )
+            action = user_input["next"]
+            if action == "add":
+                self._editing_command_index = None
+                return await self.async_step_serial_command_form()
+            if action == "edit":
+                self._command_pick_mode = "edit"
+                return await self.async_step_serial_command_pick()
+            if action == "remove":
+                self._command_pick_mode = "remove"
+                return await self.async_step_serial_command_pick()
+            if action == "import_json":
+                return await self.async_step_serial_command_import()
+            if action == "save":
+                return self._save_serial()
+        self._editing_command_index = None
+        self._command_pick_mode = None
+        menu = build_command_list_menu(
+            has_commands=bool(commands), save_label="Save serial port"
+        )
         return self.async_show_form(
-            step_id="serial_commands",
+            step_id="serial_command_list",
+            data_schema=vol.Schema({vol.Required("next"): vol.In(menu)}),
+            description_placeholders={
+                "summary": format_command_summary(commands, include_format=False),
+            },
+        )
+
+    async def async_step_serial_command_pick(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Choose which serial preset to edit or remove."""
+        assert self._serial_draft is not None
+        commands = _draft_command_list(self._serial_draft, CONF_SERIAL_COMMANDS)
+        if not commands:
+            return await self.async_step_serial_command_list()
+        mode = self._command_pick_mode or "edit"
+        if user_input is not None:
+            index = int(user_input["command"])
+            if mode == "remove":
+                self._serial_draft[CONF_SERIAL_COMMANDS] = remove_command_at(
+                    commands, index
+                )
+                self._command_pick_mode = None
+                return await self.async_step_serial_command_list()
+            self._editing_command_index = index
+            return await self.async_step_serial_command_form()
+        choices = {
+            str(index): format_command_summary([cmd], include_format=False)
+            for index, cmd in enumerate(commands)
+        }
+        listed = format_command_summary(commands, include_format=False)
+        if mode == "remove":
+            summary = (
+                "Choose a preset to remove. The button is deleted when you save "
+                f"the serial port. {listed}"
+            )
+        else:
+            summary = f"Choose a preset to edit. {listed}"
+        return self.async_show_form(
+            step_id="serial_command_pick",
+            data_schema=vol.Schema({vol.Required("command"): vol.In(choices)}),
+            description_placeholders={"summary": summary},
+        )
+
+    async def async_step_serial_command_form(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """One serial preset: name and payload."""
+        assert self._serial_draft is not None
+        commands = _draft_command_list(self._serial_draft, CONF_SERIAL_COMMANDS)
+        index = self._editing_command_index
+        existing = (
+            commands[index] if index is not None and index < len(commands) else None
+        )
+        errors: dict[str, str] = {}
+        source = user_input if user_input is not None else (existing or {})
+        if user_input is not None:
+            built, err = serial_command_from_fields(
+                str(user_input.get(CONF_CMD_NAME, "")),
+                str(user_input.get(CONF_SERIAL_PAYLOAD, "")),
+            )
+            if err or built is None:
+                errors["base"] = err or "command_fields"
+            else:
+                updated, apply_err = apply_command_change(
+                    commands, built, original_index=index if existing else None
+                )
+                if apply_err or updated is None:
+                    errors["base"] = apply_err or "duplicate_command"
+                else:
+                    self._serial_draft[CONF_SERIAL_COMMANDS] = updated
+                    self._editing_command_index = None
+                    return await self.async_step_serial_command_list()
+        return self.async_show_form(
+            step_id="serial_command_form",
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        "commands_json", default=default_json
-                    ): _COMMANDS_JSON_SELECTOR,
+                        CONF_CMD_NAME, default=str(source.get(CONF_CMD_NAME, ""))
+                    ): str,
+                    vol.Required(
+                        CONF_SERIAL_PAYLOAD,
+                        default=str(source.get(CONF_SERIAL_PAYLOAD, "")),
+                    ): _MULTILINE,
                 }
             ),
             errors=errors,
-            description_placeholders={
-                "hint": "JSON array of {name, payload} for button entities. "
-                "Use [] for none (text entity only)."
-            },
+        )
+
+    async def async_step_serial_command_import(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Replace serial presets from a JSON array."""
+        assert self._serial_draft is not None
+        commands = _draft_command_list(self._serial_draft, CONF_SERIAL_COMMANDS)
+        errors: dict[str, str] = {}
+        default_json = _import_json_default(commands, _SERIAL_IMPORT_EXAMPLE)
+        if user_input is not None:
+            default_json = str(user_input.get("commands_json", default_json))
+            parsed, parse_err = parse_serial_commands_json(default_json)
+            if parse_err or parsed is None:
+                errors["base"] = command_json_error_key(parse_err or "")
+            else:
+                slug_err = imported_commands_error(parsed)
+                if slug_err:
+                    errors["base"] = slug_err
+                else:
+                    self._serial_draft[CONF_SERIAL_COMMANDS] = parsed
+                    return await self.async_step_serial_command_list()
+        return self.async_show_form(
+            step_id="serial_command_import",
+            data_schema=vol.Schema(
+                {vol.Required("commands_json", default=default_json): _MULTILINE}
+            ),
+            errors=errors,
         )
 
     async def async_step_edit_serial(

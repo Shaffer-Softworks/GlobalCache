@@ -13,6 +13,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .command_util import ir_send_repeat, stored_int
 from .const import (
     CONF_CMD_DATA,
     CONF_CMD_FORMAT,
@@ -164,10 +165,10 @@ class ItachRemoteCommandButton(CoordinatorEntity[ItachCoordinator], ButtonEntity
                 self._port,
                 fmt,
                 data,
-                repeat=self._base_repeat,
-                offset=int(offset) if offset is not None else None,
-                frequency=int(freq) if freq is not None else None,
-                command_id=int(cid) if cid is not None else None,
+                repeat=ir_send_repeat(self._cmd, self._base_repeat),
+                offset=stored_int(offset),
+                frequency=stored_int(freq),
+                command_id=stored_int(cid),
             )
         except (ServiceValidationError, OSError, TimeoutError) as err:
             raise HomeAssistantError(str(err)) from err
