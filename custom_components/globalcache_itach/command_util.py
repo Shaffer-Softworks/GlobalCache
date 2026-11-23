@@ -139,14 +139,6 @@ def rewrite_sendir_connector(sendir_line: str, module: int, port: int) -> str:
     return f"sendir,{int(module)}:{int(port)},{parts[2]}"
 
 
-def ir_send_repeat(cmd: dict[str, Any], remote_repeat: int) -> int:
-    """sendir repeat: the command override, or the remote's repeat when blank."""
-    raw = cmd.get(CONF_CMD_REPEAT)
-    if raw is None or raw == "":
-        return int(remote_repeat)
-    return int(raw)
-
-
 def command_button_slug(name: str) -> str:
     """Slug used in remote and serial button unique ids."""
     return name.strip().lower().replace(" ", "_")
@@ -212,6 +204,22 @@ def coerce_optional_int(value: Any) -> tuple[int | None, str | None]:
             return None, "command_override_range"
         return int(parsed), None
     return None, "command_override_range"
+
+
+def stored_int(value: Any) -> int | None:
+    """Whole number from a stored command field, or None if blank or invalid."""
+    number, err = coerce_optional_int(value)
+    if err or number is None:
+        return None
+    return number
+
+
+def ir_send_repeat(cmd: dict[str, Any], remote_repeat: int) -> int:
+    """sendir repeat: the command override, or the remote's repeat when unusable."""
+    number = stored_int(cmd.get(CONF_CMD_REPEAT))
+    if number is None:
+        return int(remote_repeat)
+    return number
 
 
 def ir_command_from_fields(

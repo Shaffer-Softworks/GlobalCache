@@ -124,6 +124,9 @@ def test_ir_send_repeat_uses_command_override():
     blank, err = ir_command_from_fields("Power", "22,64", "gc_pairs")
     assert err is None and blank is not None
     assert ir_send_repeat(blank, 2) == 2
+    assert ir_send_repeat({"repeat": "3"}, 1) == 3
+    assert ir_send_repeat({"repeat": "nope"}, 4) == 4
+    assert ir_send_repeat({"repeat": True}, 2) == 2
 
 
 def test_blank_override_and_out_of_range():
